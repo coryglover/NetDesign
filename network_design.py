@@ -260,7 +260,7 @@ def old_compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, o
     return viable_pairs,possible_pairs,counter
 
 @jit(nopython=True)
-def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs, possible_pairs):
+def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs):
     """
     Compute viable pairs and possible links between two components.
 
@@ -292,22 +292,24 @@ def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs,
             label2 = X[e2].argmax()
             
             # Count how many neighbors of e1 have label2
-            count1 = (A@X)[e1,label2]
+            count1 = np.dot(A,X)[e1,label2]
             
             # Count how many neighbors of e2 have label1
-            count2 = (A@X)[e2,label1]
+            count2 = np.dot(A,X)[e2,label1]
             
             # Check connection viability
             if count1 < O[label1, label2] and count2 < O[label2, label1]:
                 viable_pairs[counter] = (e1, e2)
+                A[e1,e2] = 1.0
+                A[e2,e1] = 1.0
                 counter += 1
             
-            # Add to possible links if O allows connections
-            if O[label1, label2] > 0 and O[label2, label1] > 0:
-                possible_pairs[possible_counter] = (e1,e2)
-                possible_counter += 1
+            # # Add to possible links if O allows connections
+            # if O[label1, label2] > 0 and O[label2, label1] > 0:
+            #     possible_pairs[possible_counter] = (e1,e2)
+            #     possible_counter += 1
 
-    return viable_pairs,possible_pairs,counter
+    return viable_pairs, counter
 
 def get_prop_type(value, key=None):
     """
@@ -544,10 +546,10 @@ class NetAssembly:
         # Create neighbor dictionary
         neighbors, neighbortypes, offsets = self.build_adjacency_list()
 
-        viable_pairs, possible_pairs, counter = old_compute_viable_pairs_and_possible_links(
-            comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
-        # viable_pairs, possible_pairs, counter = compute_viable_pairs_and_possible_links(
-        #     comp1, comp2, self.X.astype(int), self.O.astype(int), self.A.astype(int), np.zeros((len(comp1)*len(comp2),2),dtype=int), np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        # viable_pairs, possible_pairs, counter = old_compute_viable_pairs_and_possible_links(
+            # comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        viable_pairs, counter = compute_viable_pairs_and_possible_links(
+            comp1, comp2, self.X.astype(float), self.O.astype(float), self.A.astype(float), np.zeros((len(comp1)*len(comp2),2),dtype=int))
         # print(counter)
         if connection_method == 'maximally_connect_check':
             if np.allclose(np.sort(viable_pairs),np.sort(possible_pairs)):
