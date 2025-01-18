@@ -566,9 +566,8 @@ class NetAssembly:
                 # Check how many neighbors each node can add
                 neighbor_matrix = self.A@self.X
                 max_neighbor_matrix = self.X@self.O
-                neighbor_count = {i: max_neighbor_matrix[self.X[i].argmax()] - neighbor_matrix[i] for i in np.append(comp1,comp2)}
+                neighbor_count = {i: max_neighbor_matrix[i] - neighbor_matrix[i] for i in np.append(comp1,comp2)}
                 for pair in viable_pairs[:counter]:
-                    print(pair)
                     if neighbor_count[pair[0]][self.X[pair[1]].argmax()] > 0 and neighbor_count[pair[1]][self.X[pair[0]].argmax()] > 0:
                         if self.graph_tool:
                             self.g.add_edge(pair)
