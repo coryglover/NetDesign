@@ -206,7 +206,7 @@ def simulate(X,O,T=100,detachment_rate=.2,directed=False):
 
     return g
 
-@jit(nopython=True)
+@jit(nopython=True, parallel=True)
 def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offsets, viable_pairs, possible_pairs):
     """
     Compute viable pairs and possible links between two components.
@@ -216,9 +216,7 @@ def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offse
         comp2 (array): Indices of nodes in component 2.
         X (array): Label matrix for nodes.
         O (array): Binding matrix.
-        neighbors (array): Flattened adjacency list of all neighbors.
         offsets (array): Offset indices for neighbors in adjacency list.
-
     Returns:
         viable_pairs (list): List of viable pairs of nodes to connect.
         possible_links (list): List of all possible links between the two components.
@@ -255,11 +253,61 @@ def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offse
                 counter += 1
             
             # Add to possible links if O allows connections
-            if O[label1, label2] > 0 and O[label2, label1] > 0:
-                possible_pairs[possible_counter] = (e1,e2)
-                possible_counter += 1
+            # if O[label1, label2] > 0 and O[label2, label1] > 0:
+            #     possible_pairs[possible_counter] = (e1,e2)
+            #     possible_counter += 1
 
-    return viable_pairs,possible_pairs,counter
+    return viable_pairs,counter
+
+# @jit(nopython=True)
+# def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs):
+#     """
+#     Compute viable pairs and possible links between two components.
+
+#     Parameters:
+#         comp1 (array): Indices of nodes in component 1.
+#         comp2 (array): Indices of nodes in component 2.
+#         X (array): Label matrix for nodes.
+#         O (array): Binding matrix.
+#         A (array): Adjacency matrix.
+#         viable_pairs (array): Array to store viable pairs of nodes to connect.
+#         possible_pairs (array): Array to store all possible links between the two components.
+
+#     Returns:
+#         viable_pairs (array): List of viable pairs of nodes to connect.
+#         possible_pairs (array): List of all possible links between the two components.
+#         counter (int): Number of viable pairs.
+#     """
+    
+#     counter = 0
+#     possible_counter = 0
+
+#     for u in nb.prange(len(comp1)):
+#         e1 = comp1[u]
+#         for v in nb.prange(len(comp2)):
+#             e2 = comp2[v]
+            
+#             # Determine the labels of e1 and e2
+#             label1 = X[e1].argmax()
+#             label2 = X[e2].argmax()
+            
+#             # Count how many neighbors of e1 have label2
+#             count1 = np.dot(A,X)[e1,label2]
+#             # Count how many neighbors of e2 have label1
+#             count2 = np.dot(A,X)[e2,label1]
+#             # Check connection viability
+#             if count1 < O[label1, label2] and count2 < O[label2, label1]:
+#                 viable_pairs[counter] = (e1, e2)
+#                 A[e1,e2] = float(1)
+#                 A[e2,e1] = float(1)
+#                 counter += 1
+            
+#             # # Add to possible links if O allows connections
+#             # if O[label1, label2] > 0 and O[label2, label1] > 0:
+#             #     possible_pairs[possible_counter] = (e1,e2)
+#             #     possible_counter += 1
+
+#     return viable_pairs, counter
 
 def get_prop_type(value, key=None):
     """
@@ -425,15 +473,15 @@ class NetAssembly:
         else:
             self.g = nx.Graph()
             self.g.add_nodes_from(range(self.N), dtype=int)
-            self.A = nx.adjacency_matrix(self.g)
+            self.A = nx.adjacency_matrix(self.g).toarray()
 
     def update_A(self):
         if self.graph_tool:
-            self.A = gt.adjacency(self.g,operator=False)
+            self.A = gt.adjacency(self.g,operator=False).toarray()
         else:
-            self.A = nx.adjacency_matrix(self.g)
+            self.A = nx.adjacency_matrix(self.g).toarray()
 
-    def run(self,T,component=False,detachment_rate=0,update_A=True,connection_method='probabilistic'):
+    def run(self,T,component=False,link_strength=0,update_A=True,connection_method='probabilistic'):
         """
         Run simulation for T timesteps.
 
@@ -442,11 +490,11 @@ class NetAssembly:
             component (bool) - randomly select connected components rather than nodes
         """
         for t in range(T):
-            self._step(component,detachment_rate,connection_method)
-        if update_A:
-            self.update_A()
+            self._step(component,link_strength,connection_method)
+            if update_A:
+                self.update_A()
 
-    def _step(self,component,detachment_rate,connection_method='probabilistic'):
+    def _step(self,component,link_strength,connection_method='probabilistic'):
         """
         A single step of simulation.
 
@@ -482,13 +530,25 @@ class NetAssembly:
             # Check whether components are the same
             if sorted(comp1) == sorted(comp2):
                 return
+        
+        np.random.shuffle(comp1)
+        np.random.shuffle(comp2)
+
+        # Get number of each node type in each component
+        # comp1_dist = self.X[comp1].sum(axis=0)
+        # comp2_dist = self.X[comp2].sum(axis=0)
+
+        # Check how many possible links between each node type
+
                 
         # Create neighbor dictionary
         neighbors, neighbortypes, offsets = self.build_adjacency_list()
-
-        viable_pairs, possible_pairs, counter = compute_viable_pairs_and_possible_links(
+        
+        viable_pairs, counter = compute_viable_pairs_and_possible_links(
             comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
-
+        # viable_pairs, counter = compute_viable_pairs_and_possible_links(
+            # comp1, comp2, self.X.astype(float), self.O.astype(float), copy.deepcopy(self.A.astype(float)), np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        # print(counter)
         if connection_method == 'maximally_connect_check':
             if np.allclose(np.sort(viable_pairs),np.sort(possible_pairs)):
                 if self.graph_tool:
@@ -499,12 +559,22 @@ class NetAssembly:
         elif connection_method == 'probabilistic':
             # Generate random number
             r = np.random.random()
-            p = np.exp(-(len(possible_pairs) - counter)*self.system_energy)
+            # Compute probability of connection based on energy
+            # p = np.exp(-(len(possible_pairs) - counter)*self.system_energy)
+            p = 1 - np.exp(-counter*self.system_energy)
             if r <= p:
-                if self.graph_tool:
-                    self.g.add_edge_list(list(viable_pairs[:counter]))
-                else:
-                    self.g.add_edges_from(list(viable_pairs[:counter]))
+                # Check how many neighbors each node can add
+                neighbor_matrix = self.A@self.X
+                max_neighbor_matrix = self.X@self.O
+                neighbor_count = {i: max_neighbor_matrix[i] - neighbor_matrix[i] for i in np.append(comp1,comp2)}
+                for pair in viable_pairs[:counter]:
+                    if neighbor_count[pair[0]][self.X[pair[1]].argmax()] > 0 and neighbor_count[pair[1]][self.X[pair[0]].argmax()] > 0:
+                        if self.graph_tool:
+                            self.g.add_edge(pair)
+                        else:
+                            self.g.add_edge(*pair)
+                        neighbor_count[pair[0]][self.X[pair[1]].argmax()] -= 1
+                        neighbor_count[pair[1]][self.X[pair[0]].argmax()] 
 
         elif connection_method == 'maximally_connect':
             if self.graph_tool:
@@ -513,19 +583,26 @@ class NetAssembly:
                 self.g.add_edges_from(list(viable_pairs[:counter]))
     
         # Batch detachment check
+        # Caculate detachment probability
         detach_prob = np.random.random(size=self.N)
-        nodes_to_check = np.where(detach_prob < detachment_rate)[0]
         
-        for node in nodes_to_check:
-            nlabels = neighbortypes[offsets[node]:offsets[node+1]]
-            ns = neighbors[offsets[node]:offsets[node+1]]
-            # Check for under-connected nodes
-            if any(nlabels.tolist().count(j) < self.O[self.labels[node], j] for j in range(self.O.shape[1])):
-                if self.graph_tool:
-                    for neigh in nlabels:
-                        self.g.remove_edge((node,neigh))
-                else:
-                    self.g.remove_edges_from((node, neigh) for neigh in ns)
+        # Count disconnected links in network
+        link_count = (self.X@self.O - self.A@self.X).sum(axis=1)
+
+        # Select node to detach
+        node_to_detach = np.random.choice(list(self.g.nodes()))
+        if detach_prob[node_to_detach] < 1 - np.exp(-link_strength*link_count[node_to_detach]):
+            if self.graph_tool:
+                self.g.remove_edges(self.g.get_out_edges(node_to_detach))
+            else:
+                self.g.remove_edges_from(list(self.g.edges(node_to_detach)))
+        # nodes_to_detach = np.where(detach_prob < np.exp(-link_strength*link_count))[0]
+        
+        # for node in nodes_to_detach:
+        #     if self.graph_tool:
+        #         self.g.remove_edges(self.g.get_out_edges(node))
+        #     else:
+        #         self.g.remove_edges_from(list(self.g.edges(node)))
 
     def build_adjacency_list(self):
         """Convert a graph's neighbors to adjacency list format."""
