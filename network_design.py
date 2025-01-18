@@ -206,8 +206,8 @@ def simulate(X,O,T=100,detachment_rate=.2,directed=False):
 
     return g
 
-@jit(nopython=True)
-def old_compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offsets, viable_pairs, possible_pairs):
+@jit(nopython=True, parallel=True)
+def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offsets, viable_pairs, possible_pairs):
     """
     Compute viable pairs and possible links between two components.
 
@@ -253,63 +253,61 @@ def old_compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, o
                 counter += 1
             
             # Add to possible links if O allows connections
-            if O[label1, label2] > 0 and O[label2, label1] > 0:
-                possible_pairs[possible_counter] = (e1,e2)
-                possible_counter += 1
-
-    return viable_pairs,possible_pairs,counter
-
-@jit(nopython=True)
-def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs):
-    """
-    Compute viable pairs and possible links between two components.
-
-    Parameters:
-        comp1 (array): Indices of nodes in component 1.
-        comp2 (array): Indices of nodes in component 2.
-        X (array): Label matrix for nodes.
-        O (array): Binding matrix.
-        A (array): Adjacency matrix.
-        viable_pairs (array): Array to store viable pairs of nodes to connect.
-        possible_pairs (array): Array to store all possible links between the two components.
-
-    Returns:
-        viable_pairs (array): List of viable pairs of nodes to connect.
-        possible_pairs (array): List of all possible links between the two components.
-        counter (int): Number of viable pairs.
-    """
-    
-    counter = 0
-    possible_counter = 0
-
-    for u in nb.prange(len(comp1)):
-        e1 = comp1[u]
-        for v in nb.prange(len(comp2)):
-            e2 = comp2[v]
-            
-            # Determine the labels of e1 and e2
-            label1 = X[e1].argmax()
-            label2 = X[e2].argmax()
-            
-            # Count how many neighbors of e1 have label2
-            count1 = np.dot(A,X)[e1,label2]
-            
-            # Count how many neighbors of e2 have label1
-            count2 = np.dot(A,X)[e2,label1]
-            
-            # Check connection viability
-            if count1 < O[label1, label2] and count2 < O[label2, label1]:
-                viable_pairs[counter] = (e1, e2)
-                A[e1,e2] = 1.0
-                A[e2,e1] = 1.0
-                counter += 1
-            
-            # # Add to possible links if O allows connections
             # if O[label1, label2] > 0 and O[label2, label1] > 0:
             #     possible_pairs[possible_counter] = (e1,e2)
             #     possible_counter += 1
 
-    return viable_pairs, counter
+    return viable_pairs,counter
+
+# @jit(nopython=True)
+# def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs):
+#     """
+#     Compute viable pairs and possible links between two components.
+
+#     Parameters:
+#         comp1 (array): Indices of nodes in component 1.
+#         comp2 (array): Indices of nodes in component 2.
+#         X (array): Label matrix for nodes.
+#         O (array): Binding matrix.
+#         A (array): Adjacency matrix.
+#         viable_pairs (array): Array to store viable pairs of nodes to connect.
+#         possible_pairs (array): Array to store all possible links between the two components.
+
+#     Returns:
+#         viable_pairs (array): List of viable pairs of nodes to connect.
+#         possible_pairs (array): List of all possible links between the two components.
+#         counter (int): Number of viable pairs.
+#     """
+    
+#     counter = 0
+#     possible_counter = 0
+
+#     for u in nb.prange(len(comp1)):
+#         e1 = comp1[u]
+#         for v in nb.prange(len(comp2)):
+#             e2 = comp2[v]
+            
+#             # Determine the labels of e1 and e2
+#             label1 = X[e1].argmax()
+#             label2 = X[e2].argmax()
+            
+#             # Count how many neighbors of e1 have label2
+#             count1 = np.dot(A,X)[e1,label2]
+#             # Count how many neighbors of e2 have label1
+#             count2 = np.dot(A,X)[e2,label1]
+#             # Check connection viability
+#             if count1 < O[label1, label2] and count2 < O[label2, label1]:
+#                 viable_pairs[counter] = (e1, e2)
+#                 A[e1,e2] = float(1)
+#                 A[e2,e1] = float(1)
+#                 counter += 1
+            
+#             # # Add to possible links if O allows connections
+#             # if O[label1, label2] > 0 and O[label2, label1] > 0:
+#             #     possible_pairs[possible_counter] = (e1,e2)
+#             #     possible_counter += 1
+
+#     return viable_pairs, counter
 
 def get_prop_type(value, key=None):
     """
@@ -479,7 +477,7 @@ class NetAssembly:
 
     def update_A(self):
         if self.graph_tool:
-            self.A = gt.adjacency(self.g,operator=False)
+            self.A = gt.adjacency(self.g,operator=False).toarray()
         else:
             self.A = nx.adjacency_matrix(self.g).toarray()
 
@@ -493,8 +491,8 @@ class NetAssembly:
         """
         for t in range(T):
             self._step(component,link_strength,connection_method)
-        if update_A:
-            self.update_A()
+            if update_A:
+                self.update_A()
 
     def _step(self,component,link_strength,connection_method='probabilistic'):
         """
@@ -545,11 +543,11 @@ class NetAssembly:
                 
         # Create neighbor dictionary
         neighbors, neighbortypes, offsets = self.build_adjacency_list()
-
-        # viable_pairs, possible_pairs, counter = old_compute_viable_pairs_and_possible_links(
-            # comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        
         viable_pairs, counter = compute_viable_pairs_and_possible_links(
-            comp1, comp2, self.X.astype(float), self.O.astype(float), self.A.astype(float), np.zeros((len(comp1)*len(comp2),2),dtype=int))
+            comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        # viable_pairs, counter = compute_viable_pairs_and_possible_links(
+            # comp1, comp2, self.X.astype(float), self.O.astype(float), copy.deepcopy(self.A.astype(float)), np.zeros((len(comp1)*len(comp2),2),dtype=int))
         # print(counter)
         if connection_method == 'maximally_connect_check':
             if np.allclose(np.sort(viable_pairs),np.sort(possible_pairs)):
@@ -565,10 +563,23 @@ class NetAssembly:
             # p = np.exp(-(len(possible_pairs) - counter)*self.system_energy)
             p = 1 - np.exp(-counter*self.system_energy)
             if r <= p:
-                if self.graph_tool:
-                    self.g.add_edge_list(list(viable_pairs[:counter]))
-                else:
-                    self.g.add_edges_from(list(viable_pairs[:counter]))
+                # Check how many neighbors each node can add
+                neighbor_matrix = self.A@self.X
+                max_neighbor_matrix = self.X@self.O
+                neighbor_count = {i: max_neighbor_matrix[self.X[i].argmax()] - neighbor_matrix[i] for i in np.append(comp1,comp2)}
+                for pair in viable_pairs[:counter]:
+                    print(pair)
+                    if neighbor_count[pair[0]][self.X[pair[1]].argmax()] > 0 and neighbor_count[pair[1]][self.X[pair[0]].argmax()] > 0:
+                        if self.graph_tool:
+                            self.g.add_edge(pair)
+                        else:
+                            self.g.add_edge(*pair)
+                        neighbor_count[pair[0]][self.X[pair[1]].argmax()] -= 1
+                        neighbor_count[pair[1]][self.X[pair[0]].argmax()] -= 1
+                # if self.graph_tool:
+                #     self.g.add_edge_list(list(viable_pairs[:counter]))
+                # else:
+                #     self.g.add_edges_from(list(viable_pairs[:counter]))
 
         elif connection_method == 'maximally_connect':
             if self.graph_tool:
