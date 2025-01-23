@@ -574,7 +574,7 @@ class NetAssembly:
                         else:
                             self.g.add_edge(*pair)
                         neighbor_count[pair[0]][self.X[pair[1]].argmax()] -= 1
-                        neighbor_count[pair[1]][self.X[pair[0]].argmax()] 
+                        neighbor_count[pair[1]][self.X[pair[0]].argmax()] -= 1
 
         elif connection_method == 'maximally_connect':
             if self.graph_tool:
