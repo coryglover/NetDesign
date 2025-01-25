@@ -206,8 +206,8 @@ def simulate(X,O,T=100,detachment_rate=.2,directed=False):
 
     return g
 
-@jit(nopython=True, parallel=True)
-def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offsets, viable_pairs, possible_pairs):
+@jit(nopython=True, parallel=False)
+def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offsets, viable_pairs):
     """
     Compute viable pairs and possible links between two components.
 
@@ -222,7 +222,6 @@ def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offse
         possible_links (list): List of all possible links between the two components.
     """
     counter = 0
-    possible_counter = 0
 
     for u in nb.prange(len(comp1)):
         e1 = comp1[u]
@@ -251,13 +250,11 @@ def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, neighbors, offse
             if count1 < O[label1, label2] and count2 < O[label2, label1]:
                 viable_pairs[counter] = (e1, e2)
                 counter += 1
-            
             # Add to possible links if O allows connections
             # if O[label1, label2] > 0 and O[label2, label1] > 0:
             #     possible_pairs[possible_counter] = (e1,e2)
             #     possible_counter += 1
-
-    return viable_pairs,counter
+    return viable_pairs, counter
 
 # @jit(nopython=True)
 # def compute_viable_pairs_and_possible_links(comp1, comp2, X, O, A, viable_pairs):
@@ -545,7 +542,8 @@ class NetAssembly:
         neighbors, neighbortypes, offsets = self.build_adjacency_list()
         
         viable_pairs, counter = compute_viable_pairs_and_possible_links(
-            comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int),np.zeros((len(comp1)*len(comp2),2),dtype=int))
+            comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int))
+
         # viable_pairs, counter = compute_viable_pairs_and_possible_links(
             # comp1, comp2, self.X.astype(float), self.O.astype(float), copy.deepcopy(self.A.astype(float)), np.zeros((len(comp1)*len(comp2),2),dtype=int))
         # print(counter)
