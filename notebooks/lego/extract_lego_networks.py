@@ -306,15 +306,19 @@ def create_lego_network(file, with_names=True):
 
     # Create a network
     G = nx.Graph()
-    G.add_edges_from(contacting_pairs)
+    G.add_nodes_from(np.arange(len(names)))
+    for i, j in contacting_pairs:
+        G.add_edge(i,j)
 
     # # Add brick name as node attribute
     # for i, name in enumerate(names):
     #     G.nodes[i]['name'] = name
+    # Get names in same order as nodes
+    unique_names = list(set(names)) 
+    num_unique_names = len(unique_names)
     if with_names:
-        # Make label matrix where each row is a node and each column is a name
-        X = np.zeros((len(names),len(np.unique(names))))
-        for i, name in enumerate(names):
-            X[i,np.unique(names) == name] = 1
+        X = np.zeros((G.number_of_nodes(), num_unique_names))
+        for i in range(G.number_of_nodes()):
+            X[i, unique_names.index(names[i])] = 1
         return G, X
-    return G
+    return G,names
