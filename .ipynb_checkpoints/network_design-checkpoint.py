@@ -478,7 +478,7 @@ class NetAssembly:
         else:
             self.A = nx.adjacency_matrix(self.g).toarray()
 
-    def run(self,T,component=False,link_strength=0,update_A=True,connection_method='probabilistic'):
+    def run(self,T,component=False,link_strength=0,update_A=True,connect_component=True,folding=True):
         """
         Run simulation for T timesteps.
 
@@ -487,11 +487,11 @@ class NetAssembly:
             component (bool) - randomly select connected components rather than nodes
         """
         for t in range(T):
-            self._step(component,link_strength,connection_method)
+            self._step(component,link_strength,connect_component,folding)
             if update_A:
                 self.update_A()
 
-    def _step(self,component,link_strength,connection_method='probabilistic'):
+    def _step(self,component,link_strength,connect_component,folding):
         """
         A single step of simulation.
 
@@ -515,21 +515,23 @@ class NetAssembly:
             n1, n2 = np.random.choice(self.N,size=2,replace=False)
 
             # Get components of the nodes
-            if self.graph_tool:
-                self.g.vp.comp, hist = gt.label_components(self.g)
-                comp1_label = self.g.vp.comp[n1]
-                comp2_label = self.g.vp.comp[n2]
-                comp1 = [int(v) for v in self.g.vertices() if self.g.vp.comp[v] == comp1_label]
-                comp2 = [int(v) for v in self.g.vertices() if self.g.vp.comp[v] == comp2_label]
-            else:
-                comp1 = list(nx.node_connected_component(self.g, n1))
-                comp2 = list(nx.node_connected_component(self.g, n2))
-            # Check whether components are the same
-            if sorted(comp1) == sorted(comp2):
-                return
+            if connect_component:
+                if self.graph_tool:
+                    self.g.vp.comp, hist = gt.label_components(self.g)
+                    comp1_label = self.g.vp.comp[n1]
+                    comp2_label = self.g.vp.comp[n2]
+                    comp1 = [int(v) for v in self.g.vertices() if self.g.vp.comp[v] == comp1_label]
+                    comp2 = [int(v) for v in self.g.vertices() if self.g.vp.comp[v] == comp2_label]
+                else:
+                    comp1 = list(nx.node_connected_component(self.g, n1))
+                    comp2 = list(nx.node_connected_component(self.g, n2))
+                # Check whether components are the same
+                if sorted(comp1) == sorted(comp2):
+                    return
         
-        np.random.shuffle(comp1)
-        np.random.shuffle(comp2)
+        if connect_component:
+            np.random.shuffle(comp1)
+            np.random.shuffle(comp2)
 
         # Get number of each node type in each component
         # comp1_dist = self.X[comp1].sum(axis=0)
@@ -537,24 +539,24 @@ class NetAssembly:
 
         # Check how many possible links between each node type
 
-                
-        # Create neighbor dictionary
-        neighbors, neighbortypes, offsets = self.build_adjacency_list()
-        
-        viable_pairs, counter = compute_viable_pairs_and_possible_links(
-            comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int))
+        if connect_component == True:
+            # Create neighbor dictionary
+            neighbors, neighbortypes, offsets = self.build_adjacency_list()
+            
+            viable_pairs, counter = compute_viable_pairs_and_possible_links(
+                comp1, comp2, self.X, self.O, neighbors, offsets, np.zeros((len(comp1)*len(comp2),2),dtype=int))
 
         # viable_pairs, counter = compute_viable_pairs_and_possible_links(
             # comp1, comp2, self.X.astype(float), self.O.astype(float), copy.deepcopy(self.A.astype(float)), np.zeros((len(comp1)*len(comp2),2),dtype=int))
         # print(counter)
-        if connection_method == 'maximally_connect_check':
-            if np.allclose(np.sort(viable_pairs),np.sort(possible_pairs)):
-                if self.graph_tool:
-                    self.g.add_edge_list(list(viable_pairs[:counter]))
-                else:
-                    self.g.add_edges_from(list(viable_pairs[:counter]))
+        # if connection_method == 'maximally_connect_check':
+        #     if np.allclose(np.sort(viable_pairs),np.sort(possible_pairs)):
+        #         if self.graph_tool:
+        #             self.g.add_edge_list(list(viable_pairs[:counter]))
+        #         else:
+        #             self.g.add_edges_from(list(viable_pairs[:counter]))
 
-        elif connection_method == 'probabilistic':
+        
             # Generate random number
             r = np.random.random()
             # Compute probability of connection based on energy
@@ -574,26 +576,89 @@ class NetAssembly:
                         neighbor_count[pair[0]][self.X[pair[1]].argmax()] -= 1
                         neighbor_count[pair[1]][self.X[pair[0]].argmax()] -= 1
 
-        elif connection_method == 'maximally_connect':
-            if self.graph_tool:
-                self.g.add_edge_list(list(viable_pairs[:counter]))
-            else:
-                self.g.add_edges_from(list(viable_pairs[:counter]))
+        else:
+            if component is True:
+                raise ValueError("Cannot connect nodes when component=True.")
+            neighbor_matrix = self.A@self.X
+            max_neighbor_matrix = self.X@self.O
+            # Check how many neighbors each node can add
+            label1 = np.argmax(self.X[n1])
+            label2 = np.argmax(self.X[n2])
+
+            if neighbor_matrix[n1,label2] < max_neighbor_matrix[n1,label2] and neighbor_matrix[n2,label1] < max_neighbor_matrix[n2,label1]:
+                if self.graph_tool:
+                    self.g.add_edge(n1,n2)
+                else:
+                    self.g.add_edge(n1,n2)
+
+            # Get 
+        # elif connection_method == 'maximally_connect':
+        #     if self.graph_tool:
+        #         self.g.add_edge_list(list(viable_pairs[:counter]))
+        #     else:
+        #         self.g.add_edges_from(list(viable_pairs[:counter]))
     
         # Batch detachment check
         # Caculate detachment probability
         detach_prob = np.random.random(size=self.N)
         
         # Count disconnected links in network
-        link_count = (self.X@self.O - self.A@self.X).sum(axis=1)
-
+        # link_count = (self.X@self.O - self.A@self.X).sum(axis=1)
+        link_count = np.divide(self.A.sum(axis=1),self.X@self.O.sum(axis=1))
+        detach_prob[np.where(link_count == 1)[0]] = 1
         # Select node to detach
-        node_to_detach = np.random.choice(list(self.g.nodes()))
-        if detach_prob[node_to_detach] < 1 - np.exp(-link_strength*link_count[node_to_detach]):
+        # nodes_to_detach = np.random.choice(list(self.g.nodes()))
+        nodes_to_detach = np.where(detach_prob < np.exp(-link_strength*link_count))[0]
+        for node_to_detach in nodes_to_detach:
+            # if detach_prob[node_to_detach] < np.exp(-link_strength*link_count[node_to_detach]):
+                # Get component of the node
+            if folding:
+                if self.graph_tool:
+                    comp = [int(v) for v in self.g.vertices() if self.g.vp.comp[v] == self.g.vp.comp[node_to_detach]]
+                else:
+                    comp = list(nx.node_connected_component(self.g, node_to_detach))
+            # Detach node
             if self.graph_tool:
                 self.g.remove_edges(self.g.get_out_edges(node_to_detach))
             else:
                 self.g.remove_edges_from(list(self.g.edges(node_to_detach)))
+            # If we detach we try to stablize the component
+            # Update the A matrix
+            if folding:
+                self.update_A()
+
+                
+                # # Get number of each node type in the component
+                # Get viable pairs between nodes in the component
+
+                # Create neighbor dictionary
+                neighbors, neighbortypes, offsets = self.build_adjacency_list()
+                comp1 = comp
+                comp2 = copy.deepcopy(comp)
+
+                np.random.shuffle(comp1)
+                np.random.shuffle(comp2)
+
+                viable_pairs, counter = compute_viable_pairs_and_possible_links(comp1,comp2,self.X,self.O,neighbors,offsets,np.zeros((len(comp1)*len(comp2),2),dtype=int))
+                # Create neighbor matrix
+                neighbor_matrix = self.A@self.X
+                max_neighbor_matrix = self.X@self.O
+                # Check how many neighbors each node can add
+                neighbor_count = {i: max_neighbor_matrix[i] - neighbor_matrix[i] for i in comp}
+                for pair in viable_pairs[:counter]:
+                    if pair[0] == pair[1]:
+                        continue
+                    else:
+                        if neighbor_count[pair[0]][self.X[pair[1]].argmax()] > 0 and neighbor_count[pair[1]][self.X[pair[0]].argmax()] > 0:
+                            if self.graph_tool:
+                                self.g.add_edge(pair)
+                            else:
+                                self.g.add_edge(*pair)
+                            neighbor_count[pair[0]][self.X[pair[1]].argmax()] -= 1
+                            neighbor_count[pair[1]][self.X[pair[0]].argmax()] -= 1
+            
+
+
         # nodes_to_detach = np.where(detach_prob < np.exp(-link_strength*link_count))[0]
         
         # for node in nodes_to_detach:
@@ -656,7 +721,7 @@ class NetAssembly:
             if color_key is None:
                 color_key = plt.cm.rainbow(np.linspace(0, 1, self.O.shape[0]))
             for i in range(self.N):
-                vcolor[i] = color_key[self.X[i].argmax()]
+                vcolor[i] = color_key[self.X[list(self.g.nodes()).index(i)].argmax()]
 
             gt.graph_draw(plot_g,vertex_fill_color=vcolor,**kwargs)
             plt.show()

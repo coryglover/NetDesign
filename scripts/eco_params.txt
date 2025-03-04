@@ -1,0 +1,2 @@
+--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/EcoNets/M_PL_074_12_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/EcoNets/M_PL_074_12_recon_2/
+--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/EcoNets/FW_016_01_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/EcoNets/FW_016_01_recon_2/

@@ -721,7 +721,7 @@ class NetAssembly:
             if color_key is None:
                 color_key = plt.cm.rainbow(np.linspace(0, 1, self.O.shape[0]))
             for i in range(self.N):
-                vcolor[i] = color_key[self.X[i].argmax()]
+                vcolor[i] = color_key[self.X[list(self.g.nodes()).index(i)].argmax()]
 
             gt.graph_draw(plot_g,vertex_fill_color=vcolor,**kwargs)
             plt.show()
