@@ -37,7 +37,7 @@ hint = hint.explode('pmid:method:quality:type')
 new_column_names = hint.columns[4].split(':')
 hint[new_column_names] = hint[hint.columns[4]].str.split(':',expand=True)
 hint.drop(columns=[hint.columns[4]],inplace=True)
-hint = hint[hint['type'] == 'co-complex']
+hint = hint[hint['type'] == 'binary']
 hint['pmid'] = hint['pmid'].astype(int)
 
 # Merge datasets
