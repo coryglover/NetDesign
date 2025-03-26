@@ -114,7 +114,7 @@ def extract_O(g,X):
     O = np.zeros((particle_num,particle_num))
 
     # Iterate through each node and its neighbors
-    for node in g.nodes:
+    for node in sorted(g.nodes):
         # Get node label
         node_label = labels[node]
         # Get neighbor labels

@@ -1,3 +1,0 @@
---data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lattice_data/hexagonal_graph_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lattice_data/hexagonal_graph_recon_2/
---data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lattice_data/cubic_graph_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lattice_data/cubic_graph_recon_2/
---data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lattice_data/triangular_graph_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lattice_data/triangular_graph_recon_2/

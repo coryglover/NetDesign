@@ -1,5 +1,0 @@
---data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lego/networks/g_architecture_lpub3d_000010_recon_1/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lego/g_architecture_lpub3d_000010_recon_1/
-#--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lego/networks/g_synthetic_test_lpub3d_000009_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lego/g_synthetic_test_lpub3d_000009_recon_2/
-#--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lego/networks/g_classics_lpub3d_000008_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lego/g_classics_lpub3d_000008_recon_2/
-#--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lego/networks/g_classics_lpub3d_000007_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lego/g_classics_lpub3d_000007_recon_2/
-#--data_dir /work/ccnr/glover.co/net_design/NetDesign/data/lego/networks/g_architecture_lpub3d_000004_recon_2/ --save_dir /work/ccnr/glover.co/net_design/NetDesign/data/analysis/lego/g_architecture_lpub3d_000004_recon_2/

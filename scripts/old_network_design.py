@@ -241,11 +241,26 @@ def generate_node_assignments(N, k):
 #     if ret_cap:
 #         return g, capacities
 #     return g
-
+def draw_network(g,X,colors=None,**kwargs):
+    """
+    Draw network where nodes are colored based on their labels.
+    
+    g (networkx) - Graph
+    X (ndarray) - matrix of node labels
+    """
+    if colors is None:
+        # Create colormap ranging across rainbow based on label
+        colormap = plt.cm.rainbow(np.linspace(0, 1, X.shape[1]))
+        colors = [colormap[i] for i in np.argmax(X,axis=1)]
+    # Make width of edges proportional to number of multiedges
+    edge_width = [d['weight'] for (u,v,d) in g.edges(data=True)]
+    nx.draw(g, node_color=colors, width=edge_width, **kwargs)
 
 def microcanonical_ensemble(
     X,
     O,
+    deg_cap=None,
+    T = 10000,
     ret_H = False,
     directed = False,
     time_of_entry = None,
@@ -268,23 +283,26 @@ def microcanonical_ensemble(
         nx.Graph or tuple: Generated graph, optionally with updated capacities.
     """
     # Initialize graph
-    graph_type = nx.MultiGraph if multiedge else (nx.DiGraph if directed else nx.Graph)
-    g = graph_type()
+    g = nx.Graph()
     g.add_nodes_from(range(len(X)))
+    # Add node attribute label
+    nx.set_node_attributes(g, {i: int(np.argmax(X[i])) for i in range(len(X))}, 'label')
     
     if time_of_entry is None:
         time_of_entry = np.zeros(len(X), dtype=float)
 
-    # Generate and shuffle node pairs
-    if directed:
-        node_pairs = np.array(list(permutations(g.nodes, 2)))
-    else:
-        node_pairs = np.array(list(combinations(g.nodes, 2)))
-    np.random.shuffle(node_pairs)
+    # # Generate and shuffle node pairs
+    # if directed:
+    #     node_pairs = np.array(list(permutations(g.nodes, 2)))
+    # else:
+    #     node_pairs = np.array(list(combinations(g.nodes, 2)))
+    # np.random.shuffle(node_pairs)
     capacities = create_capacity(X,O)
     # Process node pairs
     labels = np.argmax(X, axis=1)  # Precompute node labels
-    for node0, node1 in node_pairs:
+    for t in range(T):
+        # Randomly select node pair
+        node0, node1 = np.random.choice(g.nodes(), size=2, replace=False)
         if not multiedge and node0 == node1:
             continue
 
@@ -294,10 +312,21 @@ def microcanonical_ensemble(
 
         if directed:
             if edge0_capacity > 0:
+                if deg_cap is not None and g.degree(node0) == deg_cap[label0]:
+                    continue
                 g.add_edge(node0, node1)
                 capacities[node0][label1] -= 1
         elif edge0_capacity > 0 and edge1_capacity > 0:
-            g.add_edge(node0, node1)
+            if deg_cap is not None and (g.degree(node0) == deg_cap[label0] or g.degree(node1) == deg_cap[label1]):
+                continue
+            if not multiedge and g.has_edge(node0, node1):
+                continue
+            else:
+                if g.has_edge(node0, node1):
+                    # Increate edge weight
+                    g[node0][node1]['weight'] += 1
+                else:
+                    g.add_edge(node0, node1, weight=1)
             capacities[node0][label1] -= 1
             capacities[node1][label0] -= 1
 
