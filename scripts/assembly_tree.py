@@ -37,7 +37,7 @@ def identify_sub_layers(node,level,node_order,X):
     new_g, cutset = cut_graph(node, cut_edges)
     return list(nx.connected_components(new_g))
 
-def measure_stability(X,O,ret_g=False,initial_graph=None):
+def measure_stability(X,O,ret_g=False,initial_graph=None,deg_cap=None):
     """
     Measure stability of a network.
     
@@ -55,7 +55,7 @@ def measure_stability(X,O,ret_g=False,initial_graph=None):
         else:
             return 1
     for t in range(1000):
-        test_g = microcanonical_ensemble(X,O,initial_graph=initial_graph)
+        test_g = microcanonical_ensemble(X,O,initial_graph=initial_graph,deg_cap=deg_cap)
         new = True
         for h in cur_graphs:
             if nx.is_isomorphic(h,test_g):
@@ -68,7 +68,7 @@ def measure_stability(X,O,ret_g=False,initial_graph=None):
     else:
         return len(cur_graphs)
 
-def create_disassembly_tree(g,X,O):
+def create_disassembly_tree(g,X,O,deg_cap=None):
     """
     Create a disassembly tree for a network.
     
@@ -89,7 +89,7 @@ def create_disassembly_tree(g,X,O):
     # Initialize dictionary for assembly nodes
     assembly_nodes = {0: list(g.nodes())}
     # Check if graph assembles to one network
-    I = measure_stability(X,O)
+    I = measure_stability(X,O,deg_cap=deg_cap)
     stability_dict = {0:I}
     if I == 1:
         return disassembly_tree, stability_dict, assembly_nodes
@@ -111,13 +111,13 @@ def create_disassembly_tree(g,X,O):
                 if len(sublayer) == 1:
                     stability_dict[disassembly_tree.size() - 1] = 1
                 else:
-                    stability_dict[disassembly_tree.size() - 1] = measure_stability(X[list(sublayer)],O)
+                    stability_dict[disassembly_tree.size() - 1] = measure_stability(X[list(sublayer)],O,deg_cap=deg_cap)
         # Update leaves
         leaves = disassembly_tree.leaves()
         leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
     return disassembly_tree, stability_dict, assembly_nodes
 
-def approx_assembly_tree(g,X,O):
+def approx_assembly_tree(g,X,O,deg_cap=None):
     """
     Approximate assembly tree by cutting highest connected patricles.
     
@@ -131,7 +131,7 @@ def approx_assembly_tree(g,X,O):
         I (int) - stability index
     """
     # Get disassembly tree
-    disassembly_tree, stability_dict, assembly_nodes = create_disassembly_tree(g,X,O)
+    disassembly_tree, stability_dict, assembly_nodes = create_disassembly_tree(g,X,O,deg_cap)
     # Initialize dictionary for assembly nodes
     assembly_graphs = {}
     # List nodes from leaves to root by depth
@@ -154,7 +154,7 @@ def approx_assembly_tree(g,X,O):
             else:
                 # Generate network
                 print(g.nodes())
-                leaf_g = microcanonical_ensemble(X,O,initial_graph=g)
+                leaf_g = microcanonical_ensemble(X,O,initial_graph=g,deg_cap=deg_cap)
             # Add graph to dictionary
             assembly_graphs[n.identifier] = leaf_g
             si[n.identifier] = 1
@@ -164,7 +164,7 @@ def approx_assembly_tree(g,X,O):
             # Combine graphs
             new_g = nx.compose_all(child_graphs)
             # Run simulation
-            cur_si, new_g = measure_stability(X,O,initial_graph=new_g,ret_g=True)
+            cur_si, new_g = measure_stability(X,O,initial_graph=new_g,ret_g=True,deg_cap=deg_cap)
             # Add graph to dictionary
             assembly_graphs[n.identifier] = new_g
             si[n.identifier] = cur_si
