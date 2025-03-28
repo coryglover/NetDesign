@@ -342,6 +342,15 @@ def extract_O(g,X):
 
     return O
 
+def get_tree_depth(data, depth=0):
+    """Recursively finds the maximum depth of a JSON object considering only 'children' attributes."""
+    if isinstance(data, dict) and 'children' in data:
+        return max((get_tree_depth(child, depth + 1) for child in data['children']), default=depth)
+    elif isinstance(data, list):
+        return max((get_tree_depth(item, depth) for item in data), default=depth)
+    else:
+        return depth
+
 if __name__ == '__main__':
     # g = nx.Graph()
     # O = np.array([[0,1,1],[1,0,1],[1,1,1]])
@@ -373,5 +382,5 @@ if __name__ == '__main__':
     # print(cutset)
     # draw_network(new_g,X,with_labels=True)
     # plt.show()
-            
+
 
