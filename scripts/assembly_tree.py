@@ -399,7 +399,7 @@ if __name__ == '__main__':
     # Add edge capacities
     nx.set_edge_attributes(g,1,'capacity')
     
-    assembly_graphs, si, disassembly_tree = approx_assembly_tree(g,X,O,deg_cap,multiedge)
+    assembly_graphs, si, disassembly_tree = approx_assembly_tree(g,X,O,deg_cap)
     try:
         os.mkdir(tree_dir)
     except:
