@@ -7,6 +7,6 @@
 #SBATCH --time=4:00:00
 #SBATCH --job-name=C1Q
 #SBATCH --output=/scratch/glover.co/NetDesign/out/c1q.out
-#SBATCH --error=/scratch/glover.co/NetDesign/c1q.err
+#SBATCH --error=/scratch/glover.co/err/NetDesign/c1q.err
 
 python execute_assembly.py
