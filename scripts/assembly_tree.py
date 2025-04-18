@@ -12,6 +12,7 @@ import os
 import pickle
 import copy
 import json
+from tqdm import tqdm
 
 def cut_graph(g,pairs):
     cutset = set()
@@ -26,25 +27,69 @@ def cut_graph(g,pairs):
             cut_edges = [(u, v) for u in S for v in T if g.has_edge(u, v)]
             cutset.update(cut_edges)
             g.remove_edges_from(cut_edges)
-    return g, cutset
+    return g
 
-def identify_sub_layers(node,level,node_order,X):
+def identify_sub_layers(subset,node_order,X,O,capacity,multiedge=False):
     """
     Identify sublayers of a node in an assembly tree.
     
     Parameters:
-        node (int) - node in assembly tree
+        subset (int) - node in assembly tree
         
     Returns:
         list - sublayers of node
     """
-    cut_edges = label_pairs(node,X,node_order[level])
-    new_g, cutset = cut_graph(node, cut_edges)
-    return list(nx.connected_components(new_g))
+    best_entropy = np.inf
+    best_components = None
+    best_p = None
+    for i in range(len(node_order)):
+        print(i)
+        cut_edges = label_pairs(list(subset.nodes()),X,node_order[i])
+        new_g = cut_graph(subset, cut_edges)
+        draw_network(new_g,X,with_labels=True)
+        plt.show()
+        if nx.is_connected(new_g):
+            continue
+        split_dict = {}
+        sample_dict = {}
+        cur_entropy = 0
+        for j, k in enumerate(list(nx.connected_components(new_g))):
+            print(j,k)
+            cur_p, cur_sample_space = prob_dist(X[list(k)],O,capacity,multiedge=multiedge)
+            print(entropy(cur_p))
+            split_dict[j] = cur_p
+            sample_dict[j] = cur_sample_space
+            cur_entropy += entropy(cur_p)
+        # Check if entropy is below best
+        if cur_entropy < best_entropy:
+            success = True
+            for j in range(len(list(nx.connected_components(new_g)))):
+                if not nx.is_subgraph(sample_dict[j][np.argmax(split_dict[j])],subset):
+                    success = False
+                    break
+        if success:
+            best_entropy = cur_entropy
+            best_components = list(nx.connected_components(new_g))
+            best_p = split_dict
+    return best_components, best_p, best_entropy
 
-def measure_stability(X,O,ret_g=False,initial_graph=None,deg_cap=None,multiedge=False):
+def canonical_form(G):
+    # Fast graph hashing for isomorphism classes
+    return nx.weisfeiler_lehman_graph_hash(G)
+
+def count_isomorphs(graphs):
+    counts = dict()
+    for G in graphs:
+        key = canonical_form(G)
+        try:
+            counts[key] += 1
+        except:
+            counts[key] = 1
+    return counts
+
+def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False):
     """
-    Measure stability of a network.
+    Extract empirical distribution of system.
     
     Parameters:
         X (ndarray) - matrix of node labels
@@ -55,47 +100,99 @@ def measure_stability(X,O,ret_g=False,initial_graph=None,deg_cap=None,multiedge=
     """
     cur_graphs = []
     if initial_graph is not None and initial_graph.number_of_nodes() == 1:
-        if ret_g:
-            return 1, initial_graph
-        else:
-            return 1
-    for t in range(1000):
-        test_g = microcanonical_ensemble(X,O,initial_graph=initial_graph,deg_cap=deg_cap,multiedge=multiedge)
-        new = True
-        for h in cur_graphs:
-            if nx.is_isomorphic(h,test_g):
-                new = False
-                break
-        if new:
-            cur_graphs.append(test_g)
-    if ret_g:
-        return len(cur_graphs), cur_graphs[-1]
+        return 1, [initial_graph]
+    if verbose:
+        for t in tqdm(range(max_iters)):
+            # test_cap = np.zeros(len(X))
+            # while not np.allclose(test_cap,X@capacity):
+            test_g, rates = microcanonical_ensemble(X,O,capacity,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True)
+            cc = list(nx.connected_components(test_g))
+            for c in cc:
+                h = nx.subgraph(test_g,c)
+                if h.number_of_nodes() > 1 and rates[-test_g.number_of_nodes():][list(h.nodes())].sum() != 0:
+                    continue
+            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
+            # if nx.is_isomorphic(check_g,test_g):
+                # test_cap = np.array(test_g.degree())[:,1]
+            cur_graphs.append(test_g.copy())
     else:
-        return len(cur_graphs)
+        for t in range(max_iters):
+            
 
-def create_disassembly_tree(g,X,O,deg_cap=None,multiedge=False):
+            # test_cap = np.zeros(len(X))
+            # while not np.allclose(test_cap,X@capacity):
+            test_g, rates = microcanonical_ensemble(X,O,capacity,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True)
+            if rates[:-test_g.number_of_nodes()].sum() != 0:
+                continue
+            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
+            # if nx.is_isomorphic(check_g,test_g):
+                # test_cap = np.array(test_g.degree())[:,1]
+            cur_graphs.append(test_g.copy())
+    final_graphs = []
+    counts = []
+    sorted_indices = np.array([])
+    if verbose:
+        for i in tqdm(range(len(cur_graphs))):
+            g = cur_graphs[i]
+            found = False
+            for idx in sorted_indices:
+                if nx.is_isomorphic(g,final_graphs[idx]):
+                    found = True
+                    break
+            if not found:
+                final_graphs.append(g)
+                counts.append(1)
+            else:
+                counts[idx] += 1
+            # Reorder graphs based on number of counts
+            counts = np.array(counts)
+            sorted_indices = np.argsort(counts)[::-1]
+            counts = list(counts)
+    else:
+        for i in range(len(cur_graphs)):
+            g = cur_graphs[i]
+            found = False
+            for idx in sorted_indices:
+                if nx.is_isomorphic(g,final_graphs[idx]):
+                    found = True
+                    break
+            if not found:
+                final_graphs.append(g)
+                counts.append(1)
+            else:
+                counts[idx] += 1
+            # Reorder graphs based on number of counts
+            counts = np.array(counts)
+            sorted_indices = np.argsort(counts)[::-1]
+            counts = list(counts)
+    return np.array(counts)/np.sum(counts), final_graphs, sorted_indices
+
+def entropy(x):
+    return - np.sum(x * np.log(x + 1e-10))
+
+def create_disassembly_tree(g, X, O, capacity=None, multiedge=False):
     """
     Create a disassembly tree for a network.
-    
+
     Parameters:
-        g (nx.Graph) - Graph
-        X (ndarray) - matrix of node labels
-        O (ndarray) - binding matrix
+        g (nx.Graph): Graph
+        X (ndarray): Matrix of node labels
+        O (ndarray): Binding matrix
 
     Returns:
-        Tree - disassembly tree
+        Tree: Disassembly tree
     """
     # Order nodes by importance
-    node_importance = np.sum(O,axis=1)
+    node_importance = np.sum(O, axis=1)
     node_order = np.argsort(node_importance)[::-1]
     # Initialize assembly tree
     disassembly_tree = Tree()
-    disassembly_tree.create_node(0,0,data=list(g.nodes()))
+    disassembly_tree.create_node(0, 0)
     # Initialize dictionary for assembly nodes
     assembly_nodes = {0: list(g.nodes())}
     # Check if graph assembles to one network
-    I = measure_stability(X,O,deg_cap=deg_cap,multiedge=multiedge)
-    stability_dict = {0:I}
+    I = measure_stability(X, O, capacity=capacity,multiedge=multiedge)
+    stability_dict = {0: I}
     if I == 1:
         return disassembly_tree, stability_dict, assembly_nodes
     # Break down tree until each root has stability 1
@@ -107,42 +204,56 @@ def create_disassembly_tree(g,X,O,deg_cap=None,multiedge=False):
         # Iterate through unstable leaves
         for leaf in unstable_leaves:
             # Split leaves into sublayers
-            sublayers = identify_sub_layers(nx.subgraph(g,assembly_nodes[leaf.identifier]).copy(),disassembly_tree.depth(node=leaf),node_order,X)
+            sublayers = identify_sub_layers(
+                nx.subgraph(g, assembly_nodes[leaf.identifier]).copy(),
+                disassembly_tree.depth(node=leaf),
+                node_order,
+                X,
+            )
             # Add sublayers to tree
             for i, sublayer in enumerate(sublayers):
-                disassembly_tree.create_node(disassembly_tree.size(),disassembly_tree.size(),parent=leaf.identifier,data=list(sublayer))
+                disassembly_tree.create_node(
+                    disassembly_tree.size(),
+                    disassembly_tree.size(),
+                    parent=leaf.identifier,
+                )
                 assembly_nodes[disassembly_tree.size() - 1] = sublayer
                 # Update stability dictionary
                 if len(sublayer) == 1:
                     stability_dict[disassembly_tree.size() - 1] = 1
                 else:
-                    stability_dict[disassembly_tree.size() - 1] = measure_stability(X[list(sublayer)],O,deg_cap=deg_cap,multiedge=multiedge)
+                    stability_dict[disassembly_tree.size() - 1] = measure_stability(
+                        X[list(sublayer)], O, capacity=capacity, multiedge=multiedge
+                    )
         # Update leaves
         leaves = disassembly_tree.leaves()
         leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
     return disassembly_tree, stability_dict, assembly_nodes
 
-def approx_assembly_tree(g,X,O,deg_cap=None,multiedge=False):
+
+def approx_assembly_tree(g, X, O, capacity=None, multiedge=False):
     """
-    Approximate assembly tree by cutting highest connected patricles.
-    
+    Approximate assembly tree by cutting highest connected particles.
+
     Parameters:
         g (nx.Graph)
-        X (ndarray) - matrix of node labels
-        O (ndarray) - binding matrix
-        
+        X (ndarray): Matrix of node labels
+        O (ndarray): Binding matrix
+
     Returns:
-        nx.Graph - assembly tree
-        I (int) - stability index
+        nx.Graph: Assembly tree
+        I (int): Stability index
     """
     # Get disassembly tree
-    disassembly_tree, stability_dict, assembly_nodes = create_disassembly_tree(g,X,O,deg_cap,multiedge)
+    disassembly_tree, stability_dict, assembly_nodes = create_disassembly_tree(
+        g, X, O, capacity, multiedge
+    )
     # Initialize dictionary for assembly nodes
     assembly_graphs = {}
     # List nodes from leaves to root by depth
     nodes = disassembly_tree.all_nodes()
     depths = [disassembly_tree.depth(node=i) for i in nodes]
-    nodes = [x for _, x in sorted(zip(depths,nodes))][::-1]
+    nodes = [x for _, x in sorted(zip(depths, nodes))][::-1]
     si = {}
     # Iterate through nodes
     for n in nodes:
@@ -158,8 +269,7 @@ def approx_assembly_tree(g,X,O,deg_cap=None,multiedge=False):
                 leaf_g = g
             else:
                 # Generate network
-                print(g.nodes())
-                leaf_g = microcanonical_ensemble(X,O,initial_graph=g,deg_cap=deg_cap,multiedge=multiedge)
+                leaf_g = microcanonical_ensemble(X, O, initial_graph=g, capacity=capacity, multiedge=multiedge)
             # Add graph to dictionary
             assembly_graphs[n.identifier] = leaf_g
             si[n.identifier] = 1
@@ -169,123 +279,150 @@ def approx_assembly_tree(g,X,O,deg_cap=None,multiedge=False):
             # Combine graphs
             new_g = nx.compose_all(child_graphs)
             # Run simulation
-            cur_si, new_g = measure_stability(X,O,initial_graph=new_g,ret_g=True,deg_cap=deg_cap,multiedge=multiedge)
+            cur_si, new_g = measure_stability(
+                X, O, initial_graph=new_g, ret_g=True, capacity=capacity, multiedge=multiedge
+            )
             # Add graph to dictionary
             assembly_graphs[n.identifier] = new_g
             si[n.identifier] = cur_si
     return assembly_graphs, si, disassembly_tree
 
-
-
-        
-
-
-def create_capacity(X: np.ndarray, O: np.ndarray) -> dict:
-    """
-    Create a capacity dictionary based on node labels.
-
-    Parameters:
-        X (np.ndarray): One-hot encoded label matrix for nodes.
-        O (np.ndarray): Adjacency-like matrix where O[i, j] indicates if a node of type i can connect to type j.
-
-    Returns:
-        dict: Capacities for each node.
-    """
-    capacities = {}
-    node_labels = np.argmax(X, axis=1)  # Precompute labels for all nodes
-    
-    for i, label in enumerate(node_labels):
-        # Use a dictionary comprehension to set capacities based on `O`
-        capacities[i] = {k: int(O[label, k]) for k in range(O.shape[1])}
-    
-    return capacities
-
 def microcanonical_ensemble(
     X,
     O,
-    deg_cap=None,
+    capacity,
+    kappa_a=1.0,
+    kappa_d=1.0,
     T = 10000,
+    max_iters = int(10e6),
     initial_graph = None,
-    ret_H = False,
-    directed = False,
-    time_of_entry = None,
     multiedge = False,
-    ret_cap = False
+    ret_rates = False
 ):
     """
-    Generate a microcanonical ensemble for network design.
+    Generate a microcanonical ensemble draw using Gillepsie algorithm.
 
     Parameters:
-        X (ndarray): Node assignment matrix (one-hot encoded).
-        capacities (dict): Connection capacities for each node and label.
-        ret_H (bool): Reserved parameter (currently unused).
-        directed (bool): Whether the network is directed.
-        time_of_entry (ndarray, optional): Entry times of nodes. Defaults to all zeros.
-        self_loops (bool): Whether self-loops are allowed.
-        ret_cap (bool): Whether to return updated capacities.
-
-    Returns:
-        nx.Graph or tuple: Generated graph, optionally with updated capacities.
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        capacity (ndarray): Capacity vector.
+        kappa_a (float): Attachment rate.
+        kappa_d (float): Detachment rate.
+        T (int): Number of iterations.
+        max_iters (int): Maximum number of iterations.
+        initial_graph (networkx.Graph): Initial graph to start from.
+        multiedge (bool): Whether to allow multiple edges between nodes.
     """
+    N = X.shape[0]
     # Initialize graph
-    if initial_graph is not None:
-        g = initial_graph
-        nx.set_node_attributes(g, {i: int(np.argmax(X[i])) for i in range(len(X))}, 'label')
+    if initial_graph is None:
+        if multiedge:
+            g = nx.MultiGraph()
+            g.add_nodes_from(np.arange(N))
+        else:
+            g = nx.Graph()
+            g.add_nodes_from(np.arange(N))
     else:
-        g = nx.Graph()
-        g.add_nodes_from(range(len(X)))
-        # Add node attribute label
-        nx.set_node_attributes(g, {i: int(np.argmax(X[i])) for i in range(len(X))}, 'label')
-    
-    if time_of_entry is None:
-        time_of_entry = np.zeros(len(X), dtype=float)
+        g = initial_graph
+        # Check that number of nodes and labels is the same
+        if g.number_of_nodes() != N:
+            raise ValueError("Number of nodes and labels do not match.")
+    # Check that number of labels and binding matrix is the same
+    if X.shape[1] != O.shape[0]:
+        raise ValueError("Number of labels and binding matrix do not match.")
+    X = X[list(g.nodes())]
+    labels = X.argmax(axis=1)
+    # Initialize variables
+    t = 0
+    counter = 0
+    potential_links = X@O@X.T
+    compatibility = np.heaviside(potential_links,0.0).astype(int)
+    # Initialize rates
+    rates_attach = compatibility[np.triu_indices(N)] * kappa_a
+    rates_detach = kappa_d * np.array([1 - g.degree(i) / capacity[labels[i]] for i in range(N)])
+    rates = np.concatenate((rates_attach, rates_detach))
+    # Begin simulation
+    while t < T and counter < max_iters:
+        counter += 1
+        # Draw two uniform random variables
+        u1, u2 = np.random.uniform(0, 1, 2)
+        # Make sure simulation doesn't run too long
+        if np.sum(rates_detach) == 0 or counter > max_iters:
+            break
+        # Calculate time step
+        dt = -np.log(u1) / np.sum(rates)
+        t += dt
 
-    # # Generate and shuffle node pairs
-    # if directed:
-    #     node_pairs = np.array(list(permutations(g.nodes, 2)))
-    # else:
-    #     node_pairs = np.array(list(combinations(g.nodes, 2)))
-    # np.random.shuffle(node_pairs)
-    capacities = create_capacity(X,O)
-    if initial_graph is not None:
-        # Update capacities
-        for u, v in g.edges():
-            label0, label1 = g.nodes[u]['label'], g.nodes[v]['label']
-            capacities[u][label1] -= 1
-            capacities[v][label0] -= 1
-    # Process node pairs
-    labels = np.argmax(X, axis=1)  # Precompute node labels
-    for t in range(T):
-        # Randomly select node pair
-        node0, node1 = np.random.choice(g.nodes(), size=2, replace=False)
-        if not multiedge and node0 == node1:
-            continue
-
-        label0, label1 = labels[node0], labels[node1]
-        edge0_capacity = capacities[node0].get(label1, 0)
-        edge1_capacity = capacities[node1].get(label0, 0)
-
-        if directed:
-            if edge0_capacity > 0:
-                if deg_cap is not None and g.degree(node0) == deg_cap[label0]:
-                    continue
-                g.add_edge(node0, node1)
-                capacities[node0][label1] -= 1
-        elif edge0_capacity > 0 and edge1_capacity > 0:
-            if deg_cap is not None and (g.degree(node0) == deg_cap[label0] or g.degree(node1) == deg_cap[label1]):
+        # Draw event
+        event = np.searchsorted(np.cumsum(rates) / np.sum(rates), u2)
+        
+        # Attachment event
+        if event < len(rates_attach):
+            # Get nodes involved
+            i = np.triu_indices(N)[0][event]
+            j = np.triu_indices(N)[1][event]
+            if i == j:
                 continue
-            if not multiedge and g.has_edge(node0, node1):
+            if g.degree(i) == capacity[labels[i]] or g.degree(j) == capacity[labels[j]]:
                 continue
+            # Add edge
+            if multiedge:
+                g.add_edge(i,j)
             else:
-                if g.has_edge(node0, node1):
-                    # Increate edge weight
-                    g[node0][node1]['weight'] += 1
-                else:
-                    g.add_edge(node0, node1, weight=1)
-            capacities[node0][label1] -= 1
-            capacities[node1][label0] -= 1
+                if g.has_edge(i,j):
+                    continue
+                g.add_edge(i,j)
+        
+            # Get node labels
+            i_label = labels[i]
+            j_label = labels[j]
 
-    return (g, capacities) if ret_cap else g
+            # Update potential links
+            potential_links[i,labels==j_label] -= 1
+            potential_links[j,labels==i_label] -= 1
+
+            # Check whether nodes are at capacity
+            if g.degree(i) == capacity[i_label]:
+                potential_links[i,:] = 0
+            if g.degree(j) == capacity[j_label]:
+                potential_links[j,:] = 0 
+
+            # Update compatibility
+            compatibility = np.heaviside(potential_links,0.0).astype(int)
+            # Update rates
+            rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
+
+            rates_detach[i] = kappa_d * (1 - g.degree(i) / capacity[i_label])
+            rates_detach[j] = kappa_d * (1 - g.degree(j) / capacity[j_label])
+            # Update rates
+            rates = np.concatenate((rates_attach, rates_detach))
+            # print('Attach',i,j,rates_detach[i],rates_detach[j])
+
+        # Detachment event
+        else:
+            # Get node
+            i = event - len(rates_attach)
+            i_label = labels[i]
+            # Make node isolate
+            neighbors = list(g.neighbors(i))
+            for j in neighbors:
+                g.remove_edge(i,j)
+                # Update potential links
+                potential_links[i,labels==labels[j]] += 1
+                potential_links[j,labels==labels[i]] += 1
+                # Update compatibility
+                compatibility = np.heaviside(potential_links,0.0).astype(int)
+                rates_detach[j] = kappa_d * (1 - g.degree(j) / capacity[labels[j]])
+
+            # Update rates
+            rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
+            rates_detach[i] = kappa_d * (1 - g.degree(i) / capacity[i_label])
+            rates = np.concatenate((rates_attach, rates_detach))
+            # print('Detach',i,rates_detach[i])
+    if ret_rates:
+        return g, rates
+    else:
+        return g
 
 def draw_network(g,X,colors=None,**kwargs):
     """
@@ -375,6 +512,41 @@ def extract_deg_cap(g,X):
         deg_cap[node_label,0] = np.maximum(deg_cap[node_label,0], deg)
 
     return deg_cap
+
+def measure_stability(X, O, ret_g=False, initial_graph=None, capacity=None,multiedge=False):
+    """
+    Measure stability of a network.
+
+    Parameters:
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        ret_g (bool): Whether to return the last generated graph.
+        initial_graph (nx.Graph, optional): Initial graph to start from.
+        deg_cap (dict, optional): Degree capacities for each node label.
+
+    Returns:
+        int: Stability index.
+        nx.Graph (optional): Last generated graph if ret_g is True.
+    """
+    cur_graphs = []
+    if initial_graph is not None and initial_graph.number_of_nodes() == 1:
+        if ret_g:
+            return 1, initial_graph
+        else:
+            return 1
+    for t in range(1000):
+        test_g = microcanonical_ensemble(X, O, initial_graph=initial_graph, capacity=capacity, multiedge=multiedge, kappa_d=1, T=1)
+        new = True
+        for h in cur_graphs:
+            if nx.is_isomorphic(h, test_g):
+                new = False
+                break
+        if new:
+            cur_graphs.append(test_g)
+    if ret_g:
+        return len(cur_graphs), cur_graphs[-1]
+    else:
+        return len(cur_graphs)
     
 if __name__ == '__main__':
     # Accept input parameters
@@ -390,7 +562,6 @@ if __name__ == '__main__':
     X_file = args.X_file
     tree_dir = args.tree_dir
     multiedge = bool(args.multiedge)
-    print(file)
     # Read in graph
     g = nx.read_edgelist(file,nodetype=int)
     X = np.loadtxt(X_file)
@@ -455,5 +626,5 @@ if __name__ == '__main__':
 #     # print(cutset)
 #     # draw_network(new_g,X,with_labels=True)
 #     # plt.show()
-            
+
 
