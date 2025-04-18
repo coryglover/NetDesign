@@ -561,11 +561,18 @@ if __name__ == '__main__':
     file = args.file
     X_file = args.X_file
     tree_dir = args.tree_dir
+    multiedge = args.multiedge
+    if multiedge == 'False':
+        multiedge = False
+    else:
+        multiedge = True
+    # print(file)
     multiedge = bool(args.multiedge)
     # Read in graph
     g = nx.read_edgelist(file,nodetype=int)
     X = np.loadtxt(X_file)
     O = extract_O(g,X)
+    
     deg_cap = extract_deg_cap(g,X)
     # Add edge capacities
     nx.set_edge_attributes(g,1,'capacity')
@@ -626,5 +633,4 @@ if __name__ == '__main__':
 #     # print(cutset)
 #     # draw_network(new_g,X,with_labels=True)
 #     # plt.show()
-
 
