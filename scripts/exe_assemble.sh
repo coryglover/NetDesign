@@ -5,13 +5,13 @@
 #SBATCH --mem=100GB
 #SBATCH --partition=netsi_standard
 #SBATCH --time=infinite
-#SBATCH --job-name=ProtDesign
+#SBATCH --job-name=MolDesign
 #SBATCH --output=/scratch/glover.co/NetDesign/out/output_%A_%a.out
 #SBATCH --error=/scratch/glover.co/NetDesign/err/error_%A_%a.err
-#SBATCH --array=162
+#SBATCH --array=1-1000%100
 
 # Read the correct line from params.txt
-PARAMS=$(sed -n "${SLURM_ARRAY_TASK_ID}p" protein_params_1.txt)
+PARAMS=$(sed -n "${SLURM_ARRAY_TASK_ID}p" molecule_params_0.txt)
 
 # echo "Running job with parameters: ${PARAMS}"
 
