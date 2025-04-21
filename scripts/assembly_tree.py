@@ -29,49 +29,50 @@ def cut_graph(g,pairs):
             g.remove_edges_from(cut_edges)
     return g
 
-def identify_sub_layers(subset,node_order,X,O,capacity,multiedge=False):
+def identify_sub_layers(subset, node_to_sep, X, O, capacity, multiedge=False):
     """
     Identify sublayers of a node in an assembly tree.
-    
+
     Parameters:
-        subset (int) - node in assembly tree
-        
+        subset (nx.Graph): Subgraph of the assembly tree.
+        depth (int): Depth of the current node in the tree.
+        node_order (list): Order of nodes by importance.
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        capacity (ndarray): Capacity vector.
+        multiedge (bool): Whether to allow multiple edges between nodes.
+
     Returns:
-        list - sublayers of node
+        list: Sublayers of the node.
     """
-    best_entropy = np.inf
+    # best_entropy = np.inf
     best_components = None
-    best_p = None
-    for i in range(len(node_order)):
-        print(i)
-        cut_edges = label_pairs(list(subset.nodes()),X,node_order[i])
-        new_g = cut_graph(subset, cut_edges)
-        draw_network(new_g,X,with_labels=True)
-        plt.show()
-        if nx.is_connected(new_g):
-            continue
-        split_dict = {}
-        sample_dict = {}
-        cur_entropy = 0
-        for j, k in enumerate(list(nx.connected_components(new_g))):
-            print(j,k)
-            cur_p, cur_sample_space = prob_dist(X[list(k)],O,capacity,multiedge=multiedge)
-            print(entropy(cur_p))
-            split_dict[j] = cur_p
-            sample_dict[j] = cur_sample_space
-            cur_entropy += entropy(cur_p)
-        # Check if entropy is below best
-        if cur_entropy < best_entropy:
-            success = True
-            for j in range(len(list(nx.connected_components(new_g)))):
-                if not nx.is_subgraph(sample_dict[j][np.argmax(split_dict[j])],subset):
-                    success = False
-                    break
-        if success:
-            best_entropy = cur_entropy
-            best_components = list(nx.connected_components(new_g))
-            best_p = split_dict
-    return best_components, best_p, best_entropy
+
+    cut_edges = label_pairs(list(subset.nodes()), X, node_to_sep)
+    new_g = cut_graph(subset.copy(), cut_edges)
+
+    if nx.is_connected(new_g):
+        return None, 0
+
+    components = list(nx.connected_components(new_g))
+    valid_split = False
+
+    for component in components:
+        graphs = measure_stability(X[list(component)], O, capacity=capacity, multiedge=multiedge, ret_g=True)
+
+        for h in graphs:
+            if is_subgraph(subset,h):
+                valid_split = True
+                break
+
+        # prob_dist_values, _, _ = prob_dist(X[list(component)], O, capacity, multiedge=multiedge)
+        # cur_entropy += entropy(prob_dist_values)
+
+    if valid_split:
+        stability = len(graphs)
+        best_components = components
+
+    return best_components, stability
 
 def canonical_form(G):
     # Fast graph hashing for isomorphism classes
@@ -170,6 +171,10 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
 def entropy(x):
     return - np.sum(x * np.log(x + 1e-10))
 
+def is_subgraph(G, H):
+    GM = nx.algorithms.isomorphism.GraphMatcher(G, H)
+    return GM.subgraph_is_isomorphic()
+
 def create_disassembly_tree(g, X, O, capacity=None, multiedge=False):
     """
     Create a disassembly tree for a network.
@@ -191,43 +196,47 @@ def create_disassembly_tree(g, X, O, capacity=None, multiedge=False):
     # Initialize dictionary for assembly nodes
     assembly_nodes = {0: list(g.nodes())}
     # Check if graph assembles to one network
-    I = measure_stability(X, O, capacity=capacity,multiedge=multiedge)
+    graphs = measure_stability(X, O, capacity=capacity,multiedge=multiedge, ret_g=True)
+    I = len(graphs)
     stability_dict = {0: I}
-    if I == 1:
+    if I == 1 and nx.is_isomorphic(g, graphs[0]):
         return disassembly_tree, stability_dict, assembly_nodes
     # Break down tree until each root has stability 1
     leaves = disassembly_tree.leaves()
     leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
-    while leaf_stability > 1:
-        # Find unstable leaves
-        unstable_leaves = [i for i in leaves if stability_dict[i.identifier] > 1]
-        # Iterate through unstable leaves
-        for leaf in unstable_leaves:
-            # Split leaves into sublayers
-            sublayers = identify_sub_layers(
+    k = 0
+    # Find unstable leaves
+    unstable_leaves = [i for i in leaves if stability_dict[i.identifier] > 1]
+    # Iterate through unstable leaves
+    for leaf in unstable_leaves:
+        same = True
+        sublayers, stability = identify_sub_layers(
                 nx.subgraph(g, assembly_nodes[leaf.identifier]).copy(),
-                disassembly_tree.depth(node=leaf),
-                node_order,
+                node_order[k],
                 X,
+                O,
+                capacity
             )
-            # Add sublayers to tree
-            for i, sublayer in enumerate(sublayers):
-                disassembly_tree.create_node(
-                    disassembly_tree.size(),
-                    disassembly_tree.size(),
-                    parent=leaf.identifier,
-                )
-                assembly_nodes[disassembly_tree.size() - 1] = sublayer
-                # Update stability dictionary
-                if len(sublayer) == 1:
-                    stability_dict[disassembly_tree.size() - 1] = 1
-                else:
-                    stability_dict[disassembly_tree.size() - 1] = measure_stability(
-                        X[list(sublayer)], O, capacity=capacity, multiedge=multiedge
-                    )
+        k += 1
+        k = k % len(node_order)
+        if sublayers is None:
+            continue
+        # Add sublayers to tree
+        for i, sublayer in enumerate(sublayers):
+            disassembly_tree.create_node(
+                disassembly_tree.size(),
+                disassembly_tree.size(),
+                parent=leaf.identifier,
+            )
+            assembly_nodes[disassembly_tree.size() - 1] = sublayer
+            # Update stability dictionary
+            stability_dict[disassembly_tree.size() - 1] = stability
         # Update leaves
         leaves = disassembly_tree.leaves()
-        leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
+        for l in leaves:
+            if l not in unstable_leaves:
+                unstable_leaves.append(l)
+    # leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
     return disassembly_tree, stability_dict, assembly_nodes
 
 
@@ -543,10 +552,7 @@ def measure_stability(X, O, ret_g=False, initial_graph=None, capacity=None,multi
                 break
         if new:
             cur_graphs.append(test_g)
-    if ret_g:
-        return len(cur_graphs), cur_graphs[-1]
-    else:
-        return len(cur_graphs)
+    return cur_graphs
     
 if __name__ == '__main__':
     # Accept input parameters
