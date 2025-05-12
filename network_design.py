@@ -10,6 +10,7 @@ from scipy.spatial.distance import cdist
 import graph_tool.all as gt
 from numba import jit
 import numba as nb
+from tqdm import tqdm
 
 def get_automorphic_groups_nx(graph):
     """
@@ -126,6 +127,96 @@ def extract_O(g,X):
 
     return O
 
+def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000):
+    """
+    Extract empirical distribution of system.
+    
+    Parameters:
+        X (ndarray) - matrix of node labels
+        O (ndarray) - binding matrix
+        
+    Returns:
+        int - stability index
+    """
+    cur_graphs = []
+    if initial_graph is not None and initial_graph.number_of_nodes() == 1:
+        return 1, [initial_graph]
+    if verbose:
+        for t in tqdm(range(max_iters)):
+            # test_cap = np.zeros(len(X))
+            # while not np.allclose(test_cap,X@capacity):
+            test_g = simulate(X,O,T=T,detachment_rate=0.0)
+            # if rates[:-test_g.number_of_nodes()].sum() != 0:
+                # continue
+                    
+            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
+            # if nx.is_isomorphic(check_g,test_g):
+                # test_cap = np.array(test_g.degree())[:,1]
+            cur_graphs.append(test_g.copy())
+    else:
+        for t in range(max_iters):
+            
+
+            # test_cap = np.zeros(len(X))
+            # while not np.allclose(test_cap,X@capacity):
+            test_g = simulate(X,O,T=T,detachment_rate=0.0)
+            # if rates[:-test_g.number_of_nodes()].sum() != 0:
+            #     continue
+            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
+            # if nx.is_isomorphic(check_g,test_g):
+                # test_cap = np.array(test_g.degree())[:,1]
+            cur_graphs.append(test_g.copy())
+    final_graphs = []
+    counts = []
+    sorted_indices = np.array([])
+    if verbose:
+        for i in tqdm(range(len(cur_graphs))):
+            g = cur_graphs[i]
+            found = False
+            if labeled:
+                for idx in sorted_indices:
+                    if np.allclose(nx.adjacency_matrix(g).todense(), nx.adjacency_matrix(final_graphs[idx]).todense()):
+                        found = True
+                        break
+            else:
+                for idx in sorted_indices:
+                    if nx.is_isomorphic(g,final_graphs[idx]):
+                        found = True
+                        break
+            if not found:
+                final_graphs.append(g)
+                counts.append(1)
+            else:
+                counts[idx] += 1
+            # Reorder graphs based on number of counts
+            counts = np.array(counts)
+            sorted_indices = np.argsort(counts)[::-1]
+            counts = list(counts)
+    else:
+        for i in range(len(cur_graphs)):
+            g = cur_graphs[i]
+            found = False
+            if labeled:
+                for idx in sorted_indices:
+                    if np.allclose(nx.adjacency_matrix(g).todense(), nx.adjacency_matrix(final_graphs[idx]).todense()):
+                        found = True
+                        break
+            else:
+                for idx in sorted_indices:
+                    if nx.is_isomorphic(g,final_graphs[idx]):
+                        found = True
+                        break
+            if not found:
+                final_graphs.append(g)
+                counts.append(1)
+            else:
+                counts[idx] += 1
+            # Reorder graphs based on number of counts
+            counts = np.array(counts)
+            sorted_indices = np.argsort(counts)[::-1]
+            counts = list(counts)
+    return np.array(counts), final_graphs, sorted_indices
+
 def simulate(X,O,T=100,detachment_rate=.2,directed=False):
     """
     Simulate nodes interacting to form a network.
@@ -160,37 +251,44 @@ def simulate(X,O,T=100,detachment_rate=.2,directed=False):
     for t in range(T):
         # Select two random nodes
         n1, n2 = np.random.choice(N, size=2, replace=False)
+        label1, label2 = labels[n1], labels[n2]
+        # Check if nodes are already connected
+        if g.has_edge(n1, n2):
+            continue
+        if (sum(labels[neighbor] == label2 for neighbor in g.neighbors(n1)) < O[label1, label2] and
+                    sum(labels[neighbor] == label1 for neighbor in g.neighbors(n2)) < O[label2, label1]):
+            g.add_edge(n1, n2)
 
-        # Get components of the nodes
-        c1 = nx.node_connected_component(g, n1)
-        c2 = nx.node_connected_component(g, n2)
+        # # Get components of the nodes
+        # c1 = nx.node_connected_component(g, n1)
+        # c2 = nx.node_connected_component(g, n2)
 
-        if c1 == c2:
-            continue  # Skip if nodes are already in the same component
+        # if c1 == c2:
+        #     continue  # Skip if nodes are already in the same component
 
-        # Prepare connection attempts
-        nodes_in_c1 = np.array(list(c1))
-        nodes_in_c2 = np.array(list(c2))
-        np.random.shuffle(nodes_in_c1)
-        np.random.shuffle(nodes_in_c2)
+        # # Prepare connection attempts
+        # nodes_in_c1 = np.array(list(c1))
+        # nodes_in_c2 = np.array(list(c2))
+        # np.random.shuffle(nodes_in_c1)
+        # np.random.shuffle(nodes_in_c2)
         
-        # Node pairs and viability check
-        viable_pairs = []
-        possible_links = []
-        for e1 in nodes_in_c1:
-            for e2 in nodes_in_c2:
-                label1, label2 = labels[e1], labels[e2]
+        # # Node pairs and viability check
+        # viable_pairs = []
+        # possible_links = []
+        # for e1 in nodes_in_c1:
+        #     for e2 in nodes_in_c2:
+        #         label1, label2 = labels[e1], labels[e2]
     
-                # Check connection viability
-                if (sum(labels[neighbor] == label2 for neighbor in g.neighbors(e1)) < O[label1, label2] and
-                    sum(labels[neighbor] == label1 for neighbor in g.neighbors(e2)) < O[label2, label1]):
-                    viable_pairs.append((e1, e2))
-                if O[label1,label2] > 0 and O[label2,label1] > 0:
-                    possible_links.append((e1,e2))
+        #         # Check connection viability
+        #         if (sum(labels[neighbor] == label2 for neighbor in g.neighbors(e1)) < O[label1, label2] and
+        #             sum(labels[neighbor] == label1 for neighbor in g.neighbors(e2)) < O[label2, label1]):
+        #             viable_pairs.append((e1, e2))
+        #         if O[label1,label2] > 0 and O[label2,label1] > 0:
+        #             possible_links.append((e1,e2))
                     
         # Add viable edges
-        if set(viable_pairs) == set(possible_links):
-            g.add_edges_from(viable_pairs)
+        # if set(viable_pairs) == set(possible_links):
+            # g.add_edges_from(viable_pairs)
 
         # Batch detachment check
         detach_prob = np.random.random(size=N)

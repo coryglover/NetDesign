@@ -88,7 +88,7 @@ def count_isomorphs(graphs):
             counts[key] = 1
     return counts
 
-def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False):
+def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False):
     """
     Extract empirical distribution of system.
     
@@ -104,30 +104,15 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         return 1, [initial_graph]
     if verbose:
         for t in tqdm(range(max_iters)):
-            # test_cap = np.zeros(len(X))
-            # while not np.allclose(test_cap,X@capacity):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True)
-            cc = list(nx.connected_components(test_g))
-            for c in cc:
-                h = nx.subgraph(test_g,c)
-                if h.number_of_nodes() > 1 and rates[-test_g.number_of_nodes():][list(h.nodes())].sum() != 0:
-                    continue
-            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
-            # if nx.is_isomorphic(check_g,test_g):
-                # test_cap = np.array(test_g.degree())[:,1]
+            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True,max_edges=max_edges)
+            if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
+                continue
             cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
-            
-
-            # test_cap = np.zeros(len(X))
-            # while not np.allclose(test_cap,X@capacity):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True)
-            if rates[:-test_g.number_of_nodes()].sum() != 0:
+            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True,max_edges=max_edges)
+            if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                 continue
-            # check_g = microcanonical_ensemble(X,O,capacity,initial_graph=test_g,multiedge=multiedge,T=1,kappa_d=int(10e6),max_iters=1)
-            # if nx.is_isomorphic(check_g,test_g):
-                # test_cap = np.array(test_g.degree())[:,1]
             cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
@@ -136,10 +121,16 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         for i in tqdm(range(len(cur_graphs))):
             g = cur_graphs[i]
             found = False
-            for idx in sorted_indices:
-                if nx.is_isomorphic(g,final_graphs[idx]):
-                    found = True
-                    break
+            if labeled:
+                for idx in sorted_indices:
+                    if np.allclose(nx.adjacency_matrix(g).todense(), nx.adjacency_matrix(final_graphs[idx]).todense()):
+                        found = True
+                        break
+            else:
+                for idx in sorted_indices:
+                    if nx.is_isomorphic(g,final_graphs[idx]):
+                        found = True
+                        break
             if not found:
                 final_graphs.append(g)
                 counts.append(1)
@@ -153,10 +144,16 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         for i in range(len(cur_graphs)):
             g = cur_graphs[i]
             found = False
-            for idx in sorted_indices:
-                if nx.is_isomorphic(g,final_graphs[idx]):
-                    found = True
-                    break
+            if labeled:
+                for idx in sorted_indices:
+                    if np.allclose(nx.adjacency_matrix(g).todense(), nx.adjacency_matrix(final_graphs[idx]).todense()):
+                        found = True
+                        break
+            else:
+                for idx in sorted_indices:
+                    if nx.is_isomorphic(g,final_graphs[idx]):
+                        found = True
+                        break
             if not found:
                 final_graphs.append(g)
                 counts.append(1)
@@ -166,7 +163,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
             counts = np.array(counts)
             sorted_indices = np.argsort(counts)[::-1]
             counts = list(counts)
-    return np.array(counts)/np.sum(counts), final_graphs, sorted_indices
+    return np.array(counts), final_graphs, sorted_indices
 
 def entropy(x):
     return - np.sum(x * np.log(x + 1e-10))
@@ -306,7 +303,8 @@ def microcanonical_ensemble(
     max_iters = int(10e6),
     initial_graph = None,
     multiedge = False,
-    ret_rates = False
+    ret_rates = False,
+    max_edges = False
 ):
     """
     Generate a microcanonical ensemble draw using Gillepsie algorithm.
@@ -342,6 +340,10 @@ def microcanonical_ensemble(
     X = X[list(g.nodes())]
     labels = X.argmax(axis=1)
     # Initialize variables
+    if max_edges:
+        cur_edges = 0
+        cur_graph = g.copy()
+
     t = 0
     counter = 0
     potential_links = X@O@X.T
@@ -406,7 +408,11 @@ def microcanonical_ensemble(
             # Update rates
             rates = np.concatenate((rates_attach, rates_detach))
             # print('Attach',i,j,rates_detach[i],rates_detach[j])
-
+            if max_edges:
+                if g.number_of_edges() > cur_edges:
+                    cur_edges = g.number_of_edges()
+                    cur_graph = g.copy()
+                    # print('Max edges',cur_edges)
         # Detachment event
         else:
             # Get node
@@ -429,8 +435,12 @@ def microcanonical_ensemble(
             rates = np.concatenate((rates_attach, rates_detach))
             # print('Detach',i,rates_detach[i])
     if ret_rates:
+        if max_edges:
+            return cur_graph, rates
         return g, rates
     else:
+        if max_edges:
+            return cur_graph
         return g
 
 def draw_network(g,X,colors=None,**kwargs):
