@@ -53,9 +53,8 @@ class AssemblyTree:
         # Initial graph 
         self.G = nx.Graph()
         self.G.add_nodes_from(self.nodes)
-        self.update_prob(0)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
-        
+        self.update_prob(0)
 
     def update_tree(self,dist=None):
         """
@@ -65,6 +64,8 @@ class AssemblyTree:
         ----------
         dist (np.ndarray) -- Probability distribution for updating operations.
         """
+        # Get list of old leaves 
+        old_leaves = self.Tree.leaves()
         if dist is None:
             operation = np.random.choice(['split','merge','redistribute','complete_branch'],p=[0.25,0.25,0.25,0.25])
         else:
@@ -77,7 +78,9 @@ class AssemblyTree:
             self.split(node_id)
         elif operation == 'merge':
             # Get node ID
-            node_id = random.choice(self.Tree.leaves()).identifier
+            leaves = self.Tree.leaves()
+            # Choose from parents of leaves
+            node_id = random.choice([self.Tree.parent(leaf.identifier).identifier for leaf in leaves])
             # Merge node
             self.merge(node_id)
         elif operation == 'redistribute':
@@ -91,12 +94,20 @@ class AssemblyTree:
             # Complete branch
             self.complete_branch(node_id)
         # Update probability of node assembling into a subgraph of G
-        self.update_prob(node_id)
-        # Update probability of all parents
-        parent = self.Tree.parent(node_id)
-        while parent is not None:
-            self.update_prob(parent.identifier)
-            parent = self.Tree.parent(parent.identifier)
+        # Get children of node
+
+        # Update relevant leaf nodes
+        new_leaves = self.Tree.leaves()
+        # Get difference between old and new leaves
+        nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
+        # Update probability of all new leaves
+        while len(nodes_to_update) > 0:
+            leaf = nodes_to_update.pop()
+            self.update_prob(leaf.identifier)
+            if self.Tree.parent(leaf.identifier) is not None:
+                # Get parent node
+                parent = self.Tree.parent(leaf.identifier)
+                nodes_to_update.append(parent)
 
     def split(self,node_id):
         """
@@ -187,16 +198,18 @@ class AssemblyTree:
         node_id : int -- The ID of the node to update.
         """
         # Get graph node in tree node
-        print('here')
         node = self.Tree.get_node(node_id)
-        # Get parent node
-        parent = self.Tree.parent(node_id)
+        # Reset probabilities
+        node.data.logP = []
+        node.data.subgraph = []
         # If leaf node
         if len(node.data.subgraph) == 0:
-            # Get probability of node assembling into a subgraph of G
-            p, samples, idx = at.prob_dist(self.X, self.O, self.capacity, initial_graph=None)
             # Get nodes of subgraph
             sub_nodes = node.data.nodes
+            # Get probability of node assembling into a subgraph of G
+            p, samples, idx = at.prob_dist(self.X[sub_nodes,:], self.O, self.capacity, initial_graph=None,max_edges=True,labeled=True)
+            logp = np.log(p / p.sum())
+            
             # Get true adjacency matrix
             true_A = self.target_A[:,sub_nodes]
             true_A = true_A[sub_nodes,:]
@@ -205,28 +218,26 @@ class AssemblyTree:
                 # Get adjacency matrix
                 cur_A = nx.adjacency_matrix(samples[i]).todense()
                 if np.allclose(true_A,cur_A):
-                    node.data.P.append(p[i])
+                    node.data.logP.append(logp[i])
                     node.data.subgraph.append(samples[i])
-                    parent.data.subgraph.append(samples[i])
 
         # Loop through all existing subgraphs as starting points
         else:
             for cur_subgraph in node.data.subgraph:
-                # Get probability of node assembling into a subgraph of G
-                p, samples, idx = at.prob_dist(self.X, self.O, self.capacity, initial_graph=cur_subgraph)
                 # Get nodes of subgraph
                 sub_nodes = node.data.nodes
+                # Get probability of node assembling into a subgraph of G
+                p, samples, idx = at.prob_dist(self.X[sub_nodes,:], self.O, self.capacity, initial_graph=cur_subgraph,max_edges=True,labeled=True)
+                logp = np.log(p / p.sum())
                 # Get true adjacency matrix
-                true_A = self.target_A[:,sub_nodes]
-                true_A = true_A[sub_nodes,:]
+                true_A = self.target_A[sub_nodes,:][:,sub_nodes]
                 # Find subgraphs of true graph
                 for i in idx:
                     # Get adjacency matrix
                     cur_A = nx.adjacency_matrix(samples[i]).todense()
                     if np.allclose(true_A,cur_A):
-                        node.data.p.append(p[i])
+                        node.data.logP.append(logp[i])
                         node.data.subgraph.append(samples[i])
-                        parent.data.subgraph.append(samples[i])
 
         
         
@@ -242,7 +253,7 @@ class AssemblyNode():
     subgraph : nx.Graph -- The subgraph formed by the assembly node.
     P : float -- Probability of the node assembling into a subgraph of G.
     """
-    def __init__(self, nodes, X, O, capacity, subgraph=[], P=[]):
+    def __init__(self, nodes, X, O, capacity, subgraph=[], logP=[]):
         """
         Initialize the AssemblyNode class with the nodes, subgraph, and probability.
         
@@ -257,7 +268,7 @@ class AssemblyNode():
         self.O = O
         self.capacity = capacity
         self.subgraph = subgraph
-        self.P = P
+        self.logP = logP
         self.count = len(nodes)
 
 class TreeNode2:
