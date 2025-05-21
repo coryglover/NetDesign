@@ -7,6 +7,7 @@ import sympy
 from scipy.special import stirling2
 import networkx as nx
 import treelib
+from itertools import product
 
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
@@ -79,6 +80,8 @@ class AssemblyTree:
         elif operation == 'merge':
             # Get node ID
             leaves = self.Tree.leaves()
+            if leaves is None:
+                pass
             # Choose from parents of leaves
             node_id = random.choice([self.Tree.parent(leaf.identifier).identifier for leaf in leaves])
             # Merge node
@@ -100,9 +103,11 @@ class AssemblyTree:
         new_leaves = self.Tree.leaves()
         # Get difference between old and new leaves
         nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
+        print(nodes_to_update)
         # Update probability of all new leaves
         while len(nodes_to_update) > 0:
-            leaf = nodes_to_update.pop()
+            leaf = nodes_to_update.pop(0)
+            print(leaf)
             self.update_prob(leaf.identifier)
             if self.Tree.parent(leaf.identifier) is not None:
                 # Get parent node
@@ -199,48 +204,67 @@ class AssemblyTree:
         """
         # Get graph node in tree node
         node = self.Tree.get_node(node_id)
+        # Get sub_nodes
+        sub_nodes = node.data.nodes
         # Reset probabilities
-        node.data.logP = []
+        node.data.p = []
         node.data.subgraph = []
-        # If leaf node
-        if len(node.data.subgraph) == 0:
-            # Get nodes of subgraph
-            sub_nodes = node.data.nodes
-            # Get probability of node assembling into a subgraph of G
-            p, samples, idx = at.prob_dist(self.X[sub_nodes,:], self.O, self.capacity, initial_graph=None,max_edges=True,labeled=True)
-            logp = np.log(p / p.sum())
-            
-            # Get true adjacency matrix
-            true_A = self.target_A[:,sub_nodes]
-            true_A = true_A[sub_nodes,:]
-            # Find subgraphs of true graph
-            for i in idx:
-                # Get adjacency matrix
-                cur_A = nx.adjacency_matrix(samples[i]).todense()
-                if np.allclose(true_A,cur_A):
-                    node.data.logP.append(logp[i])
-                    node.data.subgraph.append(samples[i])
-
-        # Loop through all existing subgraphs as starting points
+        # Get children nodes
+        children = node.successors(self.Tree.identifier)
+        # Check whether any children have probability 0 and finish
+        total_child_prob = np.prod(np.array([np.sum(x) for c in children for x in self.Tree.get_node(c).data.p]))
+        if total_child_prob == 0:
+            node.data.p.append(0)
+            node.data.subgraph.append(None)
+        
+        # If no children, simulate leaf node
+        if node.is_leaf() or self.Tree.depth() == 0:
+            # Make initial graph
+            print('here')
+            initial_graph = nx.Graph()
+            initial_graph.add_nodes_from(sub_nodes)
+            # Run simulation
+            # print(at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True))
+            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
+            # Check whether sample is subgraph of G
+            node.data.subgraph = samples
+            node.data.p = p / p.sum()
         else:
-            for cur_subgraph in node.data.subgraph:
-                # Get nodes of subgraph
-                sub_nodes = node.data.nodes
-                # Get probability of node assembling into a subgraph of G
-                p, samples, idx = at.prob_dist(self.X[sub_nodes,:], self.O, self.capacity, initial_graph=cur_subgraph,max_edges=True,labeled=True)
-                logp = np.log(p / p.sum())
-                # Get true adjacency matrix
-                true_A = self.target_A[sub_nodes,:][:,sub_nodes]
-                # Find subgraphs of true graph
-                for i in idx:
-                    # Get adjacency matrix
-                    cur_A = nx.adjacency_matrix(samples[i]).todense()
-                    if np.allclose(true_A,cur_A):
-                        node.data.logP.append(logp[i])
-                        node.data.subgraph.append(samples[i])
-
+            # Get all possible subgraph combinations
+            subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
+            probs = [self.Tree.get_node(c).data.p for c in children]
+            # Get all possible combinations of subgraphs
+            subgraph_combinations = list(product(*subgraphs))
+            probs_combinations = list(product(*probs))
+            # Get probability of all children occuring
+            if len(subgraph_combinations) == 1:
+                probs = np.array(probs_combinations[0])
+            else:
+                probs = np.prod(np.array(probs_combinations),axis=1)
         
-        
+            # Loop through subgraph combinations
+            for i,subgraph in enumerate(subgraph_combinations):
+                # Check whether probability is zero
+                if probs[i] == 0:
+                    node.data.p.append(0)
+                    node.data.subgraph.append(None)
+                    continue
+                # Create initial graph as composition of subgraphs
+                initial_graph = nx.Graph()
+                for s in subgraph:
+                    initial_graph = nx.compose(initial_graph,s)
+                # Run simulation
+                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
+                p = p / np.sum(p)
+                # Check whether sample is subgraph of G
+                for j, s in enumerate(samples):
+                    if nx.is_isomorphic(s,nx.subgraph(self.target,s.nodes())) and p[j] > 0:
+                        node.data.p.append(p[j]*probs[i])
+                        node.data.subgraph.append(s)
+                        break
+                    else:
+                        node.data.p.append(0)
+                        node.data.subgraph.append(None)
 
 class AssemblyNode():
     """
@@ -253,7 +277,7 @@ class AssemblyNode():
     subgraph : nx.Graph -- The subgraph formed by the assembly node.
     P : float -- Probability of the node assembling into a subgraph of G.
     """
-    def __init__(self, nodes, X, O, capacity, subgraph=[], logP=[]):
+    def __init__(self, nodes, X, O, capacity, subgraph=[], p=[]):
         """
         Initialize the AssemblyNode class with the nodes, subgraph, and probability.
         
@@ -268,7 +292,7 @@ class AssemblyNode():
         self.O = O
         self.capacity = capacity
         self.subgraph = subgraph
-        self.logP = logP
+        self.p = p
         self.count = len(nodes)
 
 class TreeNode2:
