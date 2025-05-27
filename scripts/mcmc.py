@@ -7,6 +7,7 @@ import sympy
 from scipy.special import stirling2
 import networkx as nx
 import treelib
+from itertools import product
 
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
@@ -25,16 +26,43 @@ def get_integer_partition(n,m=None):
         return random.choice(partitions)
 
 class AssemblyTree:
-    """
-    AssemblyTree class for generating assembly trees.
-    This class implements the assembly tree structure and methods for splitting, merging, and redistributing nodes.
-    
-    Attributes
-    ----------
-    count : int -- The number of nodes in the tree.
-    parent : TreeNode2 -- The parent node of the current node.
-    children : list -- List of child nodes.
-    """
+    '''
+    AssemblyTree class for generating and managing assembly trees.
+    This class implements an assembly tree structure with methods for splitting, merging, redistributing, 
+    and completing branches of the tree. It also provides functionality for updating the probability of 
+    nodes assembling into subgraphs of a target graph.
+    nodes : list
+        List of nodes in the target graph.
+    X : np.ndarray
+        Input data matrix.
+    O : np.ndarray
+        Output data matrix.
+    capacity : int
+        Capacity constraint for the assembly process.
+    Tree : treelib.Tree
+        Tree structure representing the assembly tree.
+    target : nx.Graph
+        Target graph for the assembly process.
+    target_A : np.ndarray
+        Adjacency matrix of the target graph.
+    G : nx.Graph
+        Graph representing the current state of the assembly process.
+    Methods
+    -------
+    __init__(target, X, O, capacity)
+        Initialize the AssemblyTree with the target graph, input/output matrices, and capacity.
+    update_tree(dist=None)
+        Perform an update step on the tree using a specified probability distribution for operations.
+    split(node_id)
+        Split a node in the tree into multiple child nodes.
+    merge(node_id)
+        Merge all child nodes of a given node into the parent node.
+    redistribute(node_id)
+    complete_branch(node_id)
+        Expand a branch until all tree nodes have at most two graph nodes.
+    update_prob(node_id)
+        Update the probability of a node assembling into a subgraph of the target graph.
+    '''
     def __init__(self, target, X, O, capacity):
         """
         Initialize the AssemblyTree class with the number of nodes.
@@ -53,9 +81,8 @@ class AssemblyTree:
         # Initial graph 
         self.G = nx.Graph()
         self.G.add_nodes_from(self.nodes)
-        self.update_prob(0)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
-        
+        self.update_prob(0)
 
     def update_tree(self,dist=None):
         """
@@ -65,38 +92,85 @@ class AssemblyTree:
         ----------
         dist (np.ndarray) -- Probability distribution for updating operations.
         """
+        # Get list of old leaves 
+        old_leaves = self.Tree.leaves()
         if dist is None:
             operation = np.random.choice(['split','merge','redistribute','complete_branch'],p=[0.25,0.25,0.25,0.25])
         else:
             operation = np.random.choice(['split','merge','redistribute','complete_branch'],p=dist)
         # Perform opertation
         if operation == 'split':
+            # Make list of leaves with more than 2 nodes
+            leaves = self.Tree.leaves()
+            leaves = [leaf for leaf in leaves if (len(leaf.data.p) != 1 or leaf.data.p[0] != 1)]
+            if len(leaves) == 0:
+                print('No update performed')
+                return
             # Get node ID
-            node_id = random.choice(self.Tree.leaves()).identifier
+            node_id = random.choice(leaves).identifier
             # Split node
             self.split(node_id)
         elif operation == 'merge':
-            # Get node ID
-            node_id = random.choice(self.Tree.leaves()).identifier
+            # Find nodes which are parents of only leaves
+            if self.Tree.size() == 1:
+                print('No update performed')
+                return
+            # Get leaves
+            leaves = self.Tree.leaves()
+            
+            # Choose from parents of leaves
+            parents_of_leaves = [self.Tree.parent(leaf.identifier).identifier for leaf in leaves]
+            pos_nodes = []
+            # Check if all of parents children are leaves
+            for p in parents_of_leaves:
+                if all(child.is_leaf() for child in self.Tree.children(p)):
+                    pos_nodes.append(p)
+            # Choose leaf
+            if len(pos_nodes) == 0:
+                return
+            node_id = random.choice(pos_nodes)
             # Merge node
             self.merge(node_id)
         elif operation == 'redistribute':
+            # Make list of leaves with more than 2 nodes
+            leaves = self.Tree.leaves()
+            leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
+            if len(leaves) == 0:
+                print('No update performed')
+                return
             # Get node ID
-            node_id = random.choice(self.Tree.leaves()).identifier
+            node_id = random.choice(leaves).identifier
             # Redistribute node
             self.redistribute(node_id)
         elif operation == 'complete_branch':
+            # Make list of leaves with more than 2 nodes
+            leaves = self.Tree.leaves()
+            leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
+            if len(leaves) == 0:
+                print('No update performed')
+                return
             # Get node ID
-            node_id = random.choice(self.Tree.leaves()).identifier
+            node_id = random.choice(leaves).identifier
             # Complete branch
             self.complete_branch(node_id)
         # Update probability of node assembling into a subgraph of G
-        self.update_prob(node_id)
-        # Update probability of all parents
-        parent = self.Tree.parent(node_id)
-        while parent is not None:
-            self.update_prob(parent.identifier)
-            parent = self.Tree.parent(parent.identifier)
+        # Get children of node
+
+        # Update relevant leaf nodes
+        new_leaves = self.Tree.leaves()
+        # Get difference between old and new leaves
+        nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
+        print(nodes_to_update)
+        # Update probability of all new leaves
+        while len(nodes_to_update) > 0:
+            leaf = nodes_to_update.pop(0)
+            self.update_prob(leaf.identifier)
+            if self.Tree.parent(leaf.identifier) is not None:
+                # Get parent node
+                parent = self.Tree.parent(leaf.identifier)
+                nodes_to_update.append(parent)
+                # Order nodes by depth
+                nodes_to_update = sorted(nodes_to_update, key=lambda x: self.Tree.depth(x), reverse=True)
 
     def split(self,node_id):
         """
@@ -187,49 +261,68 @@ class AssemblyTree:
         node_id : int -- The ID of the node to update.
         """
         # Get graph node in tree node
-        print('here')
         node = self.Tree.get_node(node_id)
-        # Get parent node
-        parent = self.Tree.parent(node_id)
-        # If leaf node
-        if len(node.data.subgraph) == 0:
-            # Get probability of node assembling into a subgraph of G
-            p, samples, idx = at.prob_dist(self.X, self.O, self.capacity, initial_graph=None)
-            # Get nodes of subgraph
-            sub_nodes = node.data.nodes
-            # Get true adjacency matrix
-            true_A = self.target_A[:,sub_nodes]
-            true_A = true_A[sub_nodes,:]
-            # Find subgraphs of true graph
-            for i in idx:
-                # Get adjacency matrix
-                cur_A = nx.adjacency_matrix(samples[i]).todense()
-                if np.allclose(true_A,cur_A):
-                    node.data.P.append(p[i])
-                    node.data.subgraph.append(samples[i])
-                    parent.data.subgraph.append(samples[i])
-
-        # Loop through all existing subgraphs as starting points
+        # Get sub_nodes
+        sub_nodes = node.data.nodes
+        # Reset probabilities
+        node.data.p = []
+        node.data.subgraph = []
+        # Get children nodes
+        children = node.successors(self.Tree.identifier)
+        # Check whether any children have probability 0 and finish
+        total_child_prob = np.prod(np.array([np.sum(x) for c in children for x in self.Tree.get_node(c).data.p]))
+        if total_child_prob == 0:
+            node.data.p.append(0)
+            node.data.subgraph.append(None)
+        print(node_id)
+        # If no children, simulate leaf node
+        if node.is_leaf() or self.Tree.depth() == 0:
+            print('here')
+            # Create initial graph with sub_nodes
+            initial_graph = nx.Graph()
+            initial_graph.add_nodes_from(sub_nodes)
+            # Run simulation
+            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
+            # Check whether sample is subgraph of G
+            node.data.subgraph = samples
+            node.data.p = p / p.sum()
         else:
-            for cur_subgraph in node.data.subgraph:
-                # Get probability of node assembling into a subgraph of G
-                p, samples, idx = at.prob_dist(self.X, self.O, self.capacity, initial_graph=cur_subgraph)
-                # Get nodes of subgraph
-                sub_nodes = node.data.nodes
-                # Get true adjacency matrix
-                true_A = self.target_A[:,sub_nodes]
-                true_A = true_A[sub_nodes,:]
-                # Find subgraphs of true graph
-                for i in idx:
-                    # Get adjacency matrix
-                    cur_A = nx.adjacency_matrix(samples[i]).todense()
-                    if np.allclose(true_A,cur_A):
-                        node.data.p.append(p[i])
-                        node.data.subgraph.append(samples[i])
-                        parent.data.subgraph.append(samples[i])
-
+            # Get all possible subgraph combinations
+            subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
+            probs = [self.Tree.get_node(c).data.p for c in children]
+            # Get all possible combinations of subgraphs
+            subgraph_combinations = list(product(*subgraphs))
+            probs_combinations = list(product(*probs))
+            # Get probability of all children occuring
+            print(probs_combinations)
+            if len(subgraph_combinations) == 1:
+                probs = np.array(probs_combinations[0])
+            else:
+                probs = np.prod(np.array(probs_combinations),axis=1)
         
-        
+            # Loop through subgraph combinations
+            for i,subgraph in enumerate(subgraph_combinations):
+                # Check whether probability is zero
+                if probs[i] == 0:
+                    node.data.p.append(0)
+                    node.data.subgraph.append(None)
+                    continue
+                # Create initial graph as composition of subgraphs
+                initial_graph = nx.Graph()
+                for s in subgraph:
+                    initial_graph = nx.compose(initial_graph,s)
+                # Run simulation
+                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
+                p = p / np.sum(p)
+                # Check whether sample is subgraph of G
+                for j, s in enumerate(samples):
+                    if nx.is_isomorphic(s,nx.subgraph(self.target,s.nodes())) and p[j] > 0:
+                        node.data.p.append(p[j]*probs[i])
+                        node.data.subgraph.append(s)
+                        break
+                    else:
+                        node.data.p.append(0)
+                        node.data.subgraph.append(None)
 
 class AssemblyNode():
     """
@@ -242,7 +335,7 @@ class AssemblyNode():
     subgraph : nx.Graph -- The subgraph formed by the assembly node.
     P : float -- Probability of the node assembling into a subgraph of G.
     """
-    def __init__(self, nodes, X, O, capacity, subgraph=[], P=[]):
+    def __init__(self, nodes, X, O, capacity, subgraph=[], p=[]):
         """
         Initialize the AssemblyNode class with the nodes, subgraph, and probability.
         
@@ -257,139 +350,139 @@ class AssemblyNode():
         self.O = O
         self.capacity = capacity
         self.subgraph = subgraph
-        self.P = P
+        self.p = p
         self.count = len(nodes)
 
-class TreeNode2:
-    def __init__(self, count, parent=None):
-        self.count = count
-        self.parent = parent
-        self.children = []
-        self.P = np.nan
+# class TreeNode2:
+#     def __init__(self, count, parent=None):
+#         self.count = count
+#         self.parent = parent
+#         self.children = []
+#         self.P = np.nan
     
-    def add_children(self):
-        n_children = random.randint(2,self.count-1)
-        cont = True
-        while(cont):
-            counts_children = get_integer_partition(self.count,n_children)
-            if len(counts_children)<self.count and len(counts_children)>1:
-                cont=False
+#     def add_children(self):
+#         n_children = random.randint(2,self.count-1)
+#         cont = True
+#         while(cont):
+#             counts_children = get_integer_partition(self.count,n_children)
+#             if len(counts_children)<self.count and len(counts_children)>1:
+#                 cont=False
 
-        for i in range(len(counts_children)):
-            child = TreeNode2(counts_children[i],parent=self)
-            self.children.append(child)
+#         for i in range(len(counts_children)):
+#             child = TreeNode2(counts_children[i],parent=self)
+#             self.children.append(child)
     
-    def remove_children(self):
-        self.children = []
+#     def remove_children(self):
+#         self.children = []
 
-    def split(self,leavesl,leavess,leaves2,treenodes):
-        self.add_children()
-        for child in self.children:
-            treenodes.add(child)
-            if child.count <=2:
-                leavess.add(child)
-            else:
-                leavesl.add(child)
-        leavesl.remove(self)
-        leaves2.add(self)
-        if self.parent in leaves2:
-            leaves2.remove(self.parent)
+#     def split(self,leavesl,leavess,leaves2,treenodes):
+#         self.add_children()
+#         for child in self.children:
+#             treenodes.add(child)
+#             if child.count <=2:
+#                 leavess.add(child)
+#             else:
+#                 leavesl.add(child)
+#         leavesl.remove(self)
+#         leaves2.add(self)
+#         if self.parent in leaves2:
+#             leaves2.remove(self.parent)
 
-    def merge(self,leavesl,leavess,leaves2,treenodes):
-        for child in self.children:
-            treenodes.remove(child)
-            if child.count <=2:
-                leavess.remove(child)
-            else:
-                leavesl.remove(child)
-        self.remove_children()
-        leavesl.add(self)
-        leaves2.remove(self)
-        check = True
-        if self.parent != None:
-            for child in self.parent.children:
-                if child not in leavesl and child not in leavess:
-                    check = False
-            if check:
-                leaves2.add(self.parent)
+#     def merge(self,leavesl,leavess,leaves2,treenodes):
+#         for child in self.children:
+#             treenodes.remove(child)
+#             if child.count <=2:
+#                 leavess.remove(child)
+#             else:
+#                 leavesl.remove(child)
+#         self.remove_children()
+#         leavesl.add(self)
+#         leaves2.remove(self)
+#         check = True
+#         if self.parent != None:
+#             for child in self.parent.children:
+#                 if child not in leavesl and child not in leavess:
+#                     check = False
+#             if check:
+#                 leaves2.add(self.parent)
 
-    def complete_branch(self,leavesl,leavess,leaves2,treenodes):
-        nodeleavess = set()
-        nodeleavesl = set()
-        nodeleavesl.add(self)
-        leavesl.remove(self)
-        while(len(nodeleavesl)>0):
-            node2 = random.choice(list(nodeleavesl))
-            node2.split(nodeleavesl,nodeleavess,leaves2,treenodes)
-        for leaf in nodeleavess:
-            leavess.add(leaf)
+#     def complete_branch(self,leavesl,leavess,leaves2,treenodes):
+#         nodeleavess = set()
+#         nodeleavesl = set()
+#         nodeleavesl.add(self)
+#         leavesl.remove(self)
+#         while(len(nodeleavesl)>0):
+#             node2 = random.choice(list(nodeleavesl))
+#             node2.split(nodeleavesl,nodeleavess,leaves2,treenodes)
+#         for leaf in nodeleavess:
+#             leavess.add(leaf)
 
-    def redistribute(self,leavesl,leavess,leaves2,treenodes):
-        n_children = len(self.children)
-        for child in self.children:
-            if child.count > 2:
-                leavesl.remove(child)
-            else:
-                leavess.remove(child)
-        counts_children = get_integer_partition(self.count,n_children)
+#     def redistribute(self,leavesl,leavess,leaves2,treenodes):
+#         n_children = len(self.children)
+#         for child in self.children:
+#             if child.count > 2:
+#                 leavesl.remove(child)
+#             else:
+#                 leavess.remove(child)
+#         counts_children = get_integer_partition(self.count,n_children)
 
-        for i,child in enumerate(self.children):
-            child.count = counts_children[i]
-            if child.count > 2:
-                leavesl.add(child)
-            else:
-                leavess.add(child)
+#         for i,child in enumerate(self.children):
+#             child.count = counts_children[i]
+#             if child.count > 2:
+#                 leavesl.add(child)
+#             else:
+#                 leavess.add(child)
 
-def encode_tree(node,heights):
-    # Base case: if the node is a leaf, return just the count
-    if not hasattr(node, "children") or not node.children:
-        return [node.count]
+# def encode_tree(node,heights):
+#     # Base case: if the node is a leaf, return just the count
+#     if not hasattr(node, "children") or not node.children:
+#         return [node.count]
     
-    # Otherwise, encode the subtree for each child
-    encoded_children = [encode_tree(child,heights) for child in sorted(node.children,key = lambda v: (-heights[v],-v.count))]
+#     # Otherwise, encode the subtree for each child
+#     encoded_children = [encode_tree(child,heights) for child in sorted(node.children,key = lambda v: (-heights[v],-v.count))]
     
-    return [node.count] + [encoded_children]
+#     return [node.count] + [encoded_children]
 
-def find_height(node, level=0):
-    if not node.children:
-        return level
-    return max(find_height(child, level + 1) for child in node.children)
+# def find_height(node, level=0):
+#     if not node.children:
+#         return level
+#     return max(find_height(child, level + 1) for child in node.children)
 
 
-root = TreeNode2(9)
-leavesl = set()
-leavess = set()
-leaves2 = set()
-leavesl.add(root)
-treenodes = set()
-treenodes.add(root)
-T = 1000
+# root = TreeNode2(9)
+# leavesl = set()
+# leavess = set()
+# leaves2 = set()
+# leavesl.add(root)
+# treenodes = set()
+# treenodes.add(root)
+# T = 1000
 
-for i in range(T):
-    if len(leaves2) == 0 and len(leavesl) != 0:
-        j = random.choice([1,3])
-    elif len(leaves2) != 0 and len(leavesl) == 0:
-        j = random.choice([2,4])
-    elif len(leaves2) != 0 and len(leavesl) != 0:
-        j = random.choice([1,2,3,4])
-    else:
-        print("HERE")
-    if j==1:
-        node = random.choice(list(leavesl))
-        node.split(leavesl,leavess,leaves2,treenodes)
-    if j==2:
-        node = random.choice(list(leaves2))
-        node.merge(leavesl,leavess,leaves2,treenodes)
-    if j==3:
-        node = random.choice(list(leavesl))
-        node.complete_branch(leavesl,leavess,leaves2,treenodes)
-    if j==4:
-        node = random.choice(list(leaves2))
-        node.redistribute(leavesl,leavess,leaves2,treenodes)
+# for i in range(T):
+#     if len(leaves2) == 0 and len(leavesl) != 0:
+#         j = random.choice([1,3])
+#     elif len(leaves2) != 0 and len(leavesl) == 0:
+#         j = random.choice([2,4])
+#     elif len(leaves2) != 0 and len(leavesl) != 0:
+#         j = random.choice([1,2,3,4])
+#     else:
+#         print("HERE")
+#     if j==1:
+#         node = random.choice(list(leavesl))
+#         node.split(leavesl,leavess,leaves2,treenodes)
+#     if j==2:
+#         node = random.choice(list(leaves2))
+#         node.merge(leavesl,leavess,leaves2,treenodes)
+#     if j==3:
+#         node = random.choice(list(leavesl))
+#         node.complete_branch(leavesl,leavess,leaves2,treenodes)
+#     if j==4:
+#         node = random.choice(list(leaves2))
+#         node.redistribute(leavesl,leavess,leaves2,treenodes)
 
-heights = {v:find_height(v,0) for v in treenodes}
-tree = encode_tree(root,heights)
-# print(find_height(root))
+# heights = {v:find_height(v,0) for v in treenodes}
+# tree = encode_tree(root,heights)
+# # print(find_height(root))
 
 class DesignMCMC:
     """

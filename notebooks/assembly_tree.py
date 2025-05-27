@@ -104,13 +104,13 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         return np.array([max_iters]), [initial_graph], np.array([0])
     if verbose:
         for t in tqdm(range(max_iters)):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True,max_edges=max_edges)
+            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
             if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                 continue
             cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph,multiedge=multiedge,kappa_d=1,ret_rates = True,max_edges=max_edges)
+            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
             if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                 continue
             cur_graphs.append(test_g.copy())
@@ -297,7 +297,7 @@ def microcanonical_ensemble(
     O,
     capacity,
     kappa_a=1.0,
-    kappa_d=1.0,
+    kappa_d=0.1,
     T = 10000,
     max_iters = int(10e6),
     initial_graph = None,
@@ -334,7 +334,10 @@ def microcanonical_ensemble(
     if X.shape[1] != O.shape[0]:
         raise ValueError("Number of labels and binding matrix do not match.")
     nodes = list(g.nodes())
+    X = X[nodes]
     labels = X.argmax(axis=1)
+    # Get adjacency matrix
+    A = nx.adjacency_matrix(g).todense()
     # Initialize variables
     if max_edges:
         cur_edges = 0
@@ -342,8 +345,10 @@ def microcanonical_ensemble(
     N = g.number_of_nodes()
     t = 0
     counter = 0
-    potential_links = X@O@X.T
+    potential_links = (X@O - A@X)@X.T
+    # Account for exist links in initial graph
     compatibility = np.heaviside(potential_links,0.0).astype(int)
+    
     # Initialize rates
     rates_attach = compatibility[np.triu_indices(N)] * kappa_a
     rates_detach = kappa_d * np.array([1 - g.degree(j) / capacity[labels[i]] for i, j in enumerate(g.nodes())])
@@ -362,7 +367,6 @@ def microcanonical_ensemble(
 
         # Draw event
         event = np.searchsorted(np.cumsum(rates) / np.sum(rates), u2)
-        
         # Attachment event
         if event < len(rates_attach):
             # Get nodes involved
@@ -370,9 +374,15 @@ def microcanonical_ensemble(
             idx_j = np.triu_indices(N)[1][event]
             i = nodes[idx_i]
             j = nodes[idx_j]
+            # Get node labels
+            i_label = labels[idx_i]
+            j_label = labels[idx_j]
+            # Check that i and j are in the graph
+            if i not in g.nodes() or j not in g.nodes():
+                continue
             if i == j:
                 continue
-            if g.degree(i) == capacity[labels[i]] or g.degree(j) == capacity[labels[j]]:
+            if g.degree(i) == capacity[i_label] or g.degree(j) == capacity[j_label]:
                 continue
             # Add edge
             if multiedge:
@@ -382,19 +392,16 @@ def microcanonical_ensemble(
                     continue
                 g.add_edge(i,j)
         
-            # Get node labels
-            i_label = labels[i]
-            j_label = labels[j]
+            
 
             # Update potential links
-            potential_links[i,labels==j_label] -= 1
-            potential_links[j,labels==i_label] -= 1
-
+            potential_links[idx_i,labels==j_label] -= 1
+            potential_links[idx_j,labels==i_label] -= 1
             # Check whether nodes are at capacity
             if g.degree(i) == capacity[i_label]:
-                potential_links[i,:] = 0
+                potential_links[idx_i,:] = 0
             if g.degree(j) == capacity[j_label]:
-                potential_links[j,:] = 0 
+                potential_links[idx_j,:] = 0 
 
             # Update compatibility
             compatibility = np.heaviside(potential_links,0.0).astype(int)
@@ -407,7 +414,7 @@ def microcanonical_ensemble(
             rates = np.concatenate((rates_attach, rates_detach))
             # print('Attach',i,j,rates_detach[i],rates_detach[j])
             if max_edges:
-                if g.number_of_edges() > cur_edges:
+                if g.number_of_edges() >= cur_edges:
                     cur_edges = g.number_of_edges()
                     cur_graph = g.copy()
                     # print('Max edges',cur_edges)
@@ -416,7 +423,9 @@ def microcanonical_ensemble(
             # Get node
             idx_i = event - len(rates_attach)
             i = nodes[idx_i]
-            i_label = labels[i]
+            if i not in g.nodes():
+                continue
+            i_label = labels[idx_i]
             # Make node isolate
             neighbors = list(g.neighbors(i))
             for j in neighbors:
@@ -424,11 +433,11 @@ def microcanonical_ensemble(
                 # Get index of node j
                 idx_j = nodes.index(j)
                 # Update potential links
-                potential_links[i,labels==labels[j]] += 1
-                potential_links[j,labels==labels[i]] += 1
+                potential_links[idx_i,labels==labels[idx_j]] += 1
+                potential_links[idx_j,labels==i_label] += 1
                 # Update compatibility
                 compatibility = np.heaviside(potential_links,0.0).astype(int)
-                rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / capacity[labels[j]])
+                rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / capacity[labels[idx_j]])
 
             # Update rates
             rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
