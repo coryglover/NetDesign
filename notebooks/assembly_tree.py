@@ -236,7 +236,6 @@ def create_disassembly_tree(g, X, O, capacity=None, multiedge=False):
     # leaf_stability = np.prod([stability_dict[i.identifier] for i in leaves])
     return disassembly_tree, stability_dict, assembly_nodes
 
-
 def approx_assembly_tree(g, X, O, capacity=None, multiedge=False):
     """
     Approximate assembly tree by cutting highest connected particles.
@@ -322,6 +321,7 @@ def microcanonical_ensemble(
     """
     # Initialize graph
     if initial_graph is None:
+        N = X.shape[0]
         if multiedge:
             g = nx.MultiGraph()
             g.add_nodes_from(np.arange(N))
@@ -618,36 +618,3 @@ if __name__ == '__main__':
         np.savetxt(f'{tree_dir}/iso_flag.txt',np.array([1]))
     else:
         np.savetxt(f'{tree_dir}/iso_flag.txt',np.array([0]))
-
-# if __name__ == '__main__':
-#     # g = nx.Graph()
-#     # O = np.array([[0,1,1],[1,0,1],[1,1,1]])
-#     # X = np.array([[1,0,0],[0,1,0],[0,0,1],[0,0,1],[0,1,0],[1,0,0]])
-#     # A = np.array([[0,1,1,0,0,0],[1,0,1,0,0,0],[1,1,0,1,0,0],[0,0,1,0,1,0],[0,0,0,1,0,1],[0,0,0,1,1,0]])
-#     # g = nx.from_numpy_array(A)
-#     # nx.set_edge_attributes(g, 1, 'capacity')
-#     # draw_network(g,X,with_labels=True)
-#     # plt.show()
-
-#     # assembly_graphs, si = approx_assembly_tree(g,X,O)
-#     # print(si)
-#     # draw_network(assembly_graphs[0],X,with_labels=True)
-#     # plt.show()
-#     g = nx.read_edgelist('../data/protein_complex/proteins/yeast/edgefiles/CPX-1162.edge',nodetype=int)
-#     X = np.loadtxt('../data/protein_complex/proteins/yeast/Xfiles/X_CPX-1162.txt',dtype=int)
-#     nx.set_edge_attributes(g,1,'capacity')
-#     O = extract_O(g,X)
-#     draw_network(g,X,with_labels=True)
-#     plt.show()
-#     assembly_graphs, si, disassembly_tree = approx_assembly_tree(g,X,O)
-#     print(si)
-#     draw_network(assembly_graphs[0],X,with_labels=True)
-#     plt.show()
-#     print(nx.is_isomorphic(g,assembly_graphs[0]))
-#     disassembly_tree.show()
-#     # cut_edges = label_pairs(g,X,0)
-#     # new_g, cutset = cut_graph(g, cut_edges)
-#     # print(cutset)
-#     # draw_network(new_g,X,with_labels=True)
-#     # plt.show()
-
