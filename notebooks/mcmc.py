@@ -84,7 +84,7 @@ class AssemblyTree:
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
         self.update_prob(0)
 
-    def update_tree(self,dist=None):
+    def update_tree(self,dist=None,max_iters=100):
         """
         Perform some update step on nodes
 
@@ -105,7 +105,7 @@ class AssemblyTree:
             leaves = [leaf for leaf in leaves if (len(leaf.data.p) != 1 or leaf.data.p[0] != 1)]
             if len(leaves) == 0:
                 print('No update performed')
-                return
+                return False
             # Get node ID
             node_id = random.choice(leaves).identifier
             # Split node
@@ -114,7 +114,7 @@ class AssemblyTree:
             # Find nodes which are parents of only leaves
             if self.Tree.size() == 1:
                 print('No update performed')
-                return
+                return False
             # Get leaves
             leaves = self.Tree.leaves()
             
@@ -127,7 +127,8 @@ class AssemblyTree:
                     pos_nodes.append(p)
             # Choose leaf
             if len(pos_nodes) == 0:
-                return
+                print('No update performed')
+                return False
             node_id = random.choice(pos_nodes)
             # Merge node
             self.merge(node_id)
@@ -137,7 +138,7 @@ class AssemblyTree:
             leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
             if len(leaves) == 0:
                 print('No update performed')
-                return
+                return False
             # Get node ID
             node_id = random.choice(leaves).identifier
             # Redistribute node
@@ -148,7 +149,7 @@ class AssemblyTree:
             leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
             if len(leaves) == 0:
                 print('No update performed')
-                return
+                return False
             # Get node ID
             node_id = random.choice(leaves).identifier
             # Complete branch
@@ -160,11 +161,10 @@ class AssemblyTree:
         new_leaves = self.Tree.leaves()
         # Get difference between old and new leaves
         nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
-        print(nodes_to_update)
         # Update probability of all new leaves
         while len(nodes_to_update) > 0:
             leaf = nodes_to_update.pop(0)
-            self.update_prob(leaf.identifier)
+            self.update_prob(leaf.identifier,max_iters=max_iters)
             if self.Tree.parent(leaf.identifier) is not None:
                 # Get parent node
                 parent = self.Tree.parent(leaf.identifier)
@@ -251,7 +251,7 @@ class AssemblyTree:
                 if len(self.Tree.get_node(child).data.nodes) > 2:
                     nodes_to_split.append(child)
 
-    def update_prob(self,node_id):
+    def update_prob(self,node_id,prob_tol=10e-5,max_iters=100):
         """
         Update the probability of a given node assembling into a subgraph of G
         and all of its parents.
@@ -274,18 +274,28 @@ class AssemblyTree:
         if total_child_prob == 0:
             node.data.p.append(0)
             node.data.subgraph.append(None)
-        print(node_id)
         # If no children, simulate leaf node
-        if node.is_leaf() or self.Tree.depth() == 0:
-            print('here')
+        elif node.is_leaf() or self.Tree.depth() == 0:
             # Create initial graph with sub_nodes
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
             # Run simulation
-            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
-            # Check whether sample is subgraph of G
-            node.data.subgraph = samples
-            node.data.p = p / p.sum()
+            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
+            p = p / sum(p)
+            for i,subgraph in enumerate(samples):
+                # Check whether probability is zero
+                if p[i] < prob_tol:
+                    node.data.p.append(0)
+                    node.data.subgraph.append(None)
+                    continue
+                iso_object = nx.isomorphism.GraphMatcher(self.target,subgraph)
+                if iso_object.subgraph_is_isomorphic():
+                    node.data.p.append(p[i])
+                    node.data.subgraph.append(subgraph)
+                    break
+                else:
+                    node.data.p.append(0)
+                    node.data.subgraph.append(subgraph)
         else:
             # Get all possible subgraph combinations
             subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
@@ -294,7 +304,6 @@ class AssemblyTree:
             subgraph_combinations = list(product(*subgraphs))
             probs_combinations = list(product(*probs))
             # Get probability of all children occuring
-            print(probs_combinations)
             if len(subgraph_combinations) == 1:
                 probs = np.array(probs_combinations[0])
             else:
@@ -303,7 +312,7 @@ class AssemblyTree:
             # Loop through subgraph combinations
             for i,subgraph in enumerate(subgraph_combinations):
                 # Check whether probability is zero
-                if probs[i] == 0:
+                if probs[i] < prob_tol:
                     node.data.p.append(0)
                     node.data.subgraph.append(None)
                     continue
@@ -312,17 +321,18 @@ class AssemblyTree:
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
                 # Run simulation
-                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True)
+                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
                 p = p / np.sum(p)
                 # Check whether sample is subgraph of G
                 for j, s in enumerate(samples):
-                    if nx.is_isomorphic(s,nx.subgraph(self.target,s.nodes())) and p[j] > 0:
+                    iso_object = nx.isomorphism.GraphMatcher(self.target,s)
+                    if iso_object.subgraph_is_isomorphic() and p[j] > prob_tol:
                         node.data.p.append(p[j]*probs[i])
                         node.data.subgraph.append(s)
                         break
                     else:
                         node.data.p.append(0)
-                        node.data.subgraph.append(None)
+                        node.data.subgraph.append(s)
 
 class AssemblyNode():
     """

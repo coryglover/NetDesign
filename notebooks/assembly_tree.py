@@ -330,6 +330,8 @@ def microcanonical_ensemble(
             g.add_nodes_from(np.arange(N))
     else:
         g = initial_graph
+    # Get true edges which should always exist
+    true_edges = list(g.copy().edges())
     # Check that number of labels and binding matrix is the same
     if X.shape[1] != O.shape[0]:
         raise ValueError("Number of labels and binding matrix do not match.")
@@ -350,7 +352,7 @@ def microcanonical_ensemble(
     compatibility = np.heaviside(potential_links,0.0).astype(int)
     
     # Initialize rates
-    rates_attach = compatibility[np.triu_indices(N)] * kappa_a
+    rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
     rates_detach = kappa_d * np.array([1 - g.degree(j) / capacity[labels[i]] for i, j in enumerate(g.nodes())])
     rates = np.concatenate((rates_attach, rates_detach))
     # Begin simulation
@@ -433,16 +435,25 @@ def microcanonical_ensemble(
                 # Get index of node j
                 idx_j = nodes.index(j)
                 # Update potential links
-                potential_links[idx_i,labels==labels[idx_j]] += 1
-                potential_links[idx_j,labels==i_label] += 1
+                # potential_links[idx_i,labels==labels[idx_j]] += 1
+                # potential_links[idx_j,labels==i_label] += 1
                 # Update compatibility
                 compatibility = np.heaviside(potential_links,0.0).astype(int)
                 rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / capacity[labels[idx_j]])
 
+            missing_edges = [edge for edge in true_edges if not g.has_edge(*edge)]
+            g.add_edges_from(missing_edges)
+            # Get current potential links
+            potential_links = (X@O - nx.adjacency_matrix(g).todense()@X)@X.T
+            # Update compatibility
+            compatibility = np.heaviside(potential_links,0.0).astype(int)
             # Update rates
             rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
             rates_detach[idx_i] = kappa_d * (1 - g.degree(i) / capacity[i_label])
             rates = np.concatenate((rates_attach, rates_detach))
+            # If links are removed make sure true edges still exist
+            
+
             # print('Detach',i,rates_detach[i])
     if ret_rates:
         if max_edges:
