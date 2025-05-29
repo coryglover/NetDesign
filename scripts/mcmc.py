@@ -9,6 +9,8 @@ import networkx as nx
 import treelib
 from itertools import product
 import copy
+from tqdm import tqdm
+
 
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
@@ -134,14 +136,23 @@ class AssemblyTree:
             # Merge node
             self.merge(node_id)
         elif operation == 'redistribute':
-            # Make list of leaves with more than 2 nodes
-            leaves = self.Tree.leaves()
-            leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
-            if len(leaves) == 0:
+            if self.Tree.size() == 1:
                 # print('No update performed')
                 return False
-            # Get node ID
-            node_id = random.choice(leaves).identifier
+            # Make list of leaves with more than 2 nodes
+            leaves = self.Tree.leaves()
+            # Choose from parents of leaves
+            parents_of_leaves = [self.Tree.parent(leaf.identifier).identifier for leaf in leaves]
+            pos_nodes = []
+            # Check if all of parents children are leaves
+            for p in parents_of_leaves:
+                if all(child.is_leaf() for child in self.Tree.children(p)):
+                    pos_nodes.append(p)
+            # Choose leaf
+            if len(pos_nodes) == 0:
+                # print('No update performed')
+                return False
+            node_id = random.choice(pos_nodes)
             # Redistribute node
             self.redistribute(node_id)
         elif operation == 'complete_branch':
@@ -364,6 +375,17 @@ class AssemblyNode():
         self.p = p
         self.count = len(nodes)
 
+
+def expand_tree(tree_dict):
+        stack = [tree_dict]
+        while stack:
+            current = stack.pop()
+            for node_id, node in current.items():
+                if 'data' in node:
+                    node['data'] = np.sort(node['data'].nodes)
+                if 'children' in node:
+                    stack.extend(node['children'])
+
 class DesignMCMC:
     """
     DesignMCMC class for performing MCMC sampling on assembly trees.
@@ -373,9 +395,12 @@ class DesignMCMC:
     Attributes
     ----------
     T : numpy.ndarray -- The assembly tree.
-    G : nx.Graph -- The target graph.
-    X : numpy.ndarray -- Node labels.
-    O : numpy.ndarray -- Binding matrix.
+    proposed_T : numpy.ndarray -- The proposed assembly tree for the next iteration.
+    cur_prob : float -- The current log probability of the assembly tree.
+    samples : list -- List of sampled assembly trees.
+    log_p : list -- List of log probabilities of the sampled assembly trees.
+    dist : numpy.ndarray -- Estimated probability distribution
+    uniq_samples : list -- List of unique assembly trees sampled.
     """
 
     def __init__(self, T):
@@ -385,9 +410,13 @@ class DesignMCMC:
         self.cur_T = T
         self.proposed_T = copy.copy(T)
         self.cur_prob = np.log(sum(self.cur_T.Tree.get_node(0).data.p))
+        self.samples = []
+        self.log_p = []
+        self.unique_samples = []
+        self.dist = []
         pass
-
-    def run_mcmc(self, num_samples):
+    
+    def run_mcmc(self, num_samples, prior='uniform',verbose=False):
         """
         Run the MCMC sampling algorithm.
         
@@ -399,45 +428,115 @@ class DesignMCMC:
         -------
         samples : list -- List of sampled assembly trees.
         """
-        samples = []
-        log_p = []
-        for i in range(num_samples):
-            # Propose a new tree
-            update_success = False
-            while update_success == False:
-                update_success = self.proposed_T.update_tree()
+        if not verbose:
+            for i in range(num_samples):
+                # Propose a new tree
+                update_success = False
+                while update_success == False:
+                    update_success = self.proposed_T.update_tree()
 
-            # Get prior of tree
-            prior_val = self.tree_prior(self.proposed_T)
-            # Get likelihood of tree
-            likelihood_val = np.log(sum(self.proposed_T.Tree.get_node(0).data.p))
+                # Get prior of tree
+                if prior == 'depth':
+                    prior_val = self.tree_prior(self.proposed_T)
+                # Uniform prior
+                if prior == 'uniform':
+                    prior_val = 0
+                # Get likelihood of tree
+                p = sum(self.proposed_T.Tree.get_node(0).data.p)
+                likelihood_val = np.log(p) if p > 0 else np.log(-10e300) # Avoid log(0) by using a large negative value
+                # Calculate new posterior log prob
+                posterior = prior_val + likelihood_val
+                # Calculate acceptance probability
+                acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                # Print acceptance probability, prior_val and likelihood_val
+                # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
+                # Update current tree and probability if accepted
+                if np.random.rand() < acceptance_prob:
+                    self.cur_T = self.proposed_T
+                    self.cur_prob = posterior
+                    self.samples.append(copy.deepcopy(self.cur_T))
+                    self.log_p.append(posterior)
+                else:
+                    # If not accepted, revert to the current tree
+                    self.proposed_T = copy.deepcopy(self.cur_T)
+                    self.samples.append(copy.deepcopy(self.cur_T))
+                    self.log_p.append(copy.deepcopy(self.cur_prob))
+        else:
+            for i in tqdm(range(num_samples)):
+                # Propose a new tree
+                update_success = False
+                while update_success == False:
+                    update_success = self.proposed_T.update_tree()
 
-            # Calculate new posterior log prob
-            posterior = prior_val + likelihood_val
-            # Calculate acceptance probability
-            acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
-            # Print acceptance probability, prior_val and likelihood_val
-            print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}")
-            # Update current tree and probability if accepted
-            if np.random.rand() < acceptance_prob:
-                self.cur_T = self.proposed_T
-                self.cur_prob = posterior
-                samples.append(copy.deepcopy(self.cur_T))
-                log_p.append(posterior)
-            else:
-                # If not accepted, revert to the current tree
-                self.proposed_T = copy.deepcopy(self.cur_T)
-                samples.append(copy.deepcopy(self.cur_T))
-                log_p.append(self.cur_prob)
-        return samples, log_p
+                # Get prior of tree
+                if prior == 'depth':
+                    prior_val = self.tree_prior(self.proposed_T)
+                # Uniform prior
+                if prior == 'uniform':
+                    prior_val = 0
+                # Get likelihood of tree
+                p = sum(self.proposed_T.Tree.get_node(0).data.p)
+                likelihood_val = np.log(p) if p > 0 else np.log(10e-300) # Avoid log(0) by using a small value
+                # Calculate new posterior log prob
+                posterior = prior_val + likelihood_val
+                # Calculate acceptance probability
+                acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                # Print acceptance probability, prior_val and likelihood_val
+                # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
+                # Update current tree and probability if accepted
+                if np.random.rand() < acceptance_prob:
+                    self.cur_T = self.proposed_T
+                    self.cur_prob = posterior
+                    self.samples.append(copy.deepcopy(self.cur_T))
+                    self.log_p.append(posterior)
+                else:
+                    # If not accepted, revert to the current tree
+                    self.proposed_T = copy.deepcopy(self.cur_T)
+                    self.samples.append(copy.deepcopy(self.cur_T))
+                    self.log_p.append(copy.deepcopy(self.cur_prob))
+        # Update the estimated probability distribution of the assembly tree
+        self.update_dist()
+    
+    def update_dist(self):
+        """
+        Update the estimated probability distribution of the assembly tree.
+        """
+        # Get all unique assembly trees
+        self.unique_samples = []
+        for s in self.samples:
+            tree = s.Tree.to_dict(with_data=True)
+            expand_tree(tree)
+            new = True
+            for k in self.unique_samples:
+                if k == s:
+                    new = False
+                    break
+            if new:
+                self.unique_samples.append(tree)
+                # Average the log probabilities of unique samples
+        self.dist = np.zeros(len(self.unique_samples))
+        for i, sample in enumerate(self.unique_samples):
+            for j, s in enumerate(self.samples):
+                count = 0
+                cur_tree = s.Tree.to_dict(with_data=True)
+                expand_tree(cur_tree)
+                if cur_tree == sample:
+                    count += 1
+                    # If the sample matches the unique sample, add its log probability
+                    self.dist[i] += self.log_p[j]
+            # Take the mean of the log probabilities for this sample
+            self.dist[i] = self.dist[i] / count if count > 0 else 0
+            self.dist[i] = np.exp(self.dist[i])
     
     def recursive_summation(self,depth, current_Q):
+        if depth <= 2:
+            return 1
         if depth == 2:
             return stirling2(current_Q, 2)
         summation = 0
         for an in range(depth, current_Q - 1):
             s = stirling2(current_Q, an)
-            summation += s + self.recursive_summation(depth - 1, an)
+            summation += s*self.recursive_summation(depth - 1, an)
         return summation
 
     def tree_prior(self,T):
