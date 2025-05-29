@@ -8,6 +8,7 @@ from scipy.special import stirling2
 import networkx as nx
 import treelib
 from itertools import product
+import copy
 
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
@@ -104,7 +105,7 @@ class AssemblyTree:
             leaves = self.Tree.leaves()
             leaves = [leaf for leaf in leaves if (len(leaf.data.p) != 1 or leaf.data.p[0] != 1)]
             if len(leaves) == 0:
-                print('No update performed')
+                # print('No update performed')
                 return False
             # Get node ID
             node_id = random.choice(leaves).identifier
@@ -113,7 +114,7 @@ class AssemblyTree:
         elif operation == 'merge':
             # Find nodes which are parents of only leaves
             if self.Tree.size() == 1:
-                print('No update performed')
+                # print('No update performed')
                 return False
             # Get leaves
             leaves = self.Tree.leaves()
@@ -127,7 +128,7 @@ class AssemblyTree:
                     pos_nodes.append(p)
             # Choose leaf
             if len(pos_nodes) == 0:
-                print('No update performed')
+                # print('No update performed')
                 return False
             node_id = random.choice(pos_nodes)
             # Merge node
@@ -137,7 +138,7 @@ class AssemblyTree:
             leaves = self.Tree.leaves()
             leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
             if len(leaves) == 0:
-                print('No update performed')
+                # print('No update performed')
                 return False
             # Get node ID
             node_id = random.choice(leaves).identifier
@@ -148,7 +149,7 @@ class AssemblyTree:
             leaves = self.Tree.leaves()
             leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
             if len(leaves) == 0:
-                print('No update performed')
+                # print('No update performed')
                 return False
             # Get node ID
             node_id = random.choice(leaves).identifier
@@ -363,137 +364,6 @@ class AssemblyNode():
         self.p = p
         self.count = len(nodes)
 
-# class TreeNode2:
-#     def __init__(self, count, parent=None):
-#         self.count = count
-#         self.parent = parent
-#         self.children = []
-#         self.P = np.nan
-    
-#     def add_children(self):
-#         n_children = random.randint(2,self.count-1)
-#         cont = True
-#         while(cont):
-#             counts_children = get_integer_partition(self.count,n_children)
-#             if len(counts_children)<self.count and len(counts_children)>1:
-#                 cont=False
-
-#         for i in range(len(counts_children)):
-#             child = TreeNode2(counts_children[i],parent=self)
-#             self.children.append(child)
-    
-#     def remove_children(self):
-#         self.children = []
-
-#     def split(self,leavesl,leavess,leaves2,treenodes):
-#         self.add_children()
-#         for child in self.children:
-#             treenodes.add(child)
-#             if child.count <=2:
-#                 leavess.add(child)
-#             else:
-#                 leavesl.add(child)
-#         leavesl.remove(self)
-#         leaves2.add(self)
-#         if self.parent in leaves2:
-#             leaves2.remove(self.parent)
-
-#     def merge(self,leavesl,leavess,leaves2,treenodes):
-#         for child in self.children:
-#             treenodes.remove(child)
-#             if child.count <=2:
-#                 leavess.remove(child)
-#             else:
-#                 leavesl.remove(child)
-#         self.remove_children()
-#         leavesl.add(self)
-#         leaves2.remove(self)
-#         check = True
-#         if self.parent != None:
-#             for child in self.parent.children:
-#                 if child not in leavesl and child not in leavess:
-#                     check = False
-#             if check:
-#                 leaves2.add(self.parent)
-
-#     def complete_branch(self,leavesl,leavess,leaves2,treenodes):
-#         nodeleavess = set()
-#         nodeleavesl = set()
-#         nodeleavesl.add(self)
-#         leavesl.remove(self)
-#         while(len(nodeleavesl)>0):
-#             node2 = random.choice(list(nodeleavesl))
-#             node2.split(nodeleavesl,nodeleavess,leaves2,treenodes)
-#         for leaf in nodeleavess:
-#             leavess.add(leaf)
-
-#     def redistribute(self,leavesl,leavess,leaves2,treenodes):
-#         n_children = len(self.children)
-#         for child in self.children:
-#             if child.count > 2:
-#                 leavesl.remove(child)
-#             else:
-#                 leavess.remove(child)
-#         counts_children = get_integer_partition(self.count,n_children)
-
-#         for i,child in enumerate(self.children):
-#             child.count = counts_children[i]
-#             if child.count > 2:
-#                 leavesl.add(child)
-#             else:
-#                 leavess.add(child)
-
-# def encode_tree(node,heights):
-#     # Base case: if the node is a leaf, return just the count
-#     if not hasattr(node, "children") or not node.children:
-#         return [node.count]
-    
-#     # Otherwise, encode the subtree for each child
-#     encoded_children = [encode_tree(child,heights) for child in sorted(node.children,key = lambda v: (-heights[v],-v.count))]
-    
-#     return [node.count] + [encoded_children]
-
-# def find_height(node, level=0):
-#     if not node.children:
-#         return level
-#     return max(find_height(child, level + 1) for child in node.children)
-
-
-# root = TreeNode2(9)
-# leavesl = set()
-# leavess = set()
-# leaves2 = set()
-# leavesl.add(root)
-# treenodes = set()
-# treenodes.add(root)
-# T = 1000
-
-# for i in range(T):
-#     if len(leaves2) == 0 and len(leavesl) != 0:
-#         j = random.choice([1,3])
-#     elif len(leaves2) != 0 and len(leavesl) == 0:
-#         j = random.choice([2,4])
-#     elif len(leaves2) != 0 and len(leavesl) != 0:
-#         j = random.choice([1,2,3,4])
-#     else:
-#         print("HERE")
-#     if j==1:
-#         node = random.choice(list(leavesl))
-#         node.split(leavesl,leavess,leaves2,treenodes)
-#     if j==2:
-#         node = random.choice(list(leaves2))
-#         node.merge(leavesl,leavess,leaves2,treenodes)
-#     if j==3:
-#         node = random.choice(list(leavesl))
-#         node.complete_branch(leavesl,leavess,leaves2,treenodes)
-#     if j==4:
-#         node = random.choice(list(leaves2))
-#         node.redistribute(leavesl,leavess,leaves2,treenodes)
-
-# heights = {v:find_height(v,0) for v in treenodes}
-# tree = encode_tree(root,heights)
-# # print(find_height(root))
-
 class DesignMCMC:
     """
     DesignMCMC class for performing MCMC sampling on assembly trees.
@@ -508,14 +378,13 @@ class DesignMCMC:
     O : numpy.ndarray -- Binding matrix.
     """
 
-    def __init__(self, T, G, X, O):
+    def __init__(self, T):
         """
         Initialize the DesignMCMC class with the assembly tree, target graph, node labels, and binding matrix.
         """
-        self.T = T
-        self.G = G
-        self.X = X
-        self.O = O
+        self.cur_T = T
+        self.proposed_T = copy.copy(T)
+        self.cur_prob = np.log(sum(self.cur_T.Tree.get_node(0).data.p))
         pass
 
     def run_mcmc(self, num_samples):
@@ -531,46 +400,47 @@ class DesignMCMC:
         samples : list -- List of sampled assembly trees.
         """
         samples = []
+        log_p = []
         for i in range(num_samples):
             # Propose a new tree
-            new_tree = self.propose_new_tree()
-            # Compute acceptance probability
-            acceptance_prob = self.compute_acceptance_prob(new_tree)
-            # Accept or reject the new tree
+            update_success = False
+            while update_success == False:
+                update_success = self.proposed_T.update_tree()
+
+            # Get prior of tree
+            prior_val = self.tree_prior(self.proposed_T)
+            # Get likelihood of tree
+            likelihood_val = np.log(sum(self.proposed_T.Tree.get_node(0).data.p))
+
+            # Calculate new posterior log prob
+            posterior = prior_val + likelihood_val
+            # Calculate acceptance probability
+            acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+            # Print acceptance probability, prior_val and likelihood_val
+            print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}")
+            # Update current tree and probability if accepted
             if np.random.rand() < acceptance_prob:
-                self.T = new_tree
-            samples.append(self.T)
-        return samples
+                self.cur_T = self.proposed_T
+                self.cur_prob = posterior
+                samples.append(copy.deepcopy(self.cur_T))
+                log_p.append(posterior)
+            else:
+                # If not accepted, revert to the current tree
+                self.proposed_T = copy.deepcopy(self.cur_T)
+                samples.append(copy.deepcopy(self.cur_T))
+                log_p.append(self.cur_prob)
+        return samples, log_p
     
-    
-
-    def posterior(T,G,X,O):
-        """
-        Compute the posterior distribution of the parameters given the data.
-        
-        Parameters
-        ----------
-        T : numpy.ndarray -- The assembly tree.
-        G : nx.Graph -- The target graph.
-        X : numpy.ndarray -- Node labels.
-        O : numpy.ndarray -- Binding matrix.
-
-        Returns
-        -------
-        posterior_val : float -- The posterior distribution value.
-        """
-        pass
-
-    def recursive_summation(depth, current_Q):
+    def recursive_summation(self,depth, current_Q):
         if depth == 2:
-            return stirling.s2(current_Q, 2)
+            return stirling2(current_Q, 2)
         summation = 0
         for an in range(depth, current_Q - 1):
-            s = stirling.s2(current_Q, an)
-            summation += s + recursive_summation(depth - 1, an)
+            s = stirling2(current_Q, an)
+            summation += s + self.recursive_summation(depth - 1, an)
         return summation
 
-    def tree_prior(T,X):
+    def tree_prior(self,T):
         """
         Compute the prior distribution of the assembly tree.
         
@@ -584,59 +454,18 @@ class DesignMCMC:
         prior_val : float -- The prior distribution value.
         """
         # Get depth of tree
-        D = np.max([find_height(node) for node in T])
+        D = T.Tree.depth()
         # Get number of partitions
-        Q = num_leaves(T)
+        Q = len(T.Tree.leaves())
 
         # Compute Bell Number on N nodes
-        N = X.shape[0]
+        N = T.X.shape[0]
         bell_number = 0
         for k in range(N + 1):
             bell_number += stirling2(N, k)
         
         # Calculate internal count of number of possible splits with depth D
-        num_trees = recursive_summation(D, Q)
+        num_trees = self.recursive_summation(D, Q)
 
-        return -np.log(bell_number) - np.log(Q) - np.log(num_trees)
-
-    def prob_tree_node(G,node,X,O,capacity,initial_graph=None,**kwargs):
-        """
-        Compute the probability of a given tree node assembling into a subgraph of G.
-        
-        Parameters
-        ----------
-        G : nx.Graph -- The target graph.
-        node : TreeNode2 -- The tree node.
-        X : numpy.ndarray -- Node labels.
-        O : numpy.ndarray -- Binding matrix.
-        initial_graph : nx.Graph, optional -- The initial graph (default is None).
-        
-        Returns
-        -------
-        prob : float -- The probability of the tree node assembling into a subgraph of G.
-        """
-        # Simulate assembly of node for 1000 time steps
-        p, samples, idx = at.prob_dist(X,O,capacity,initial_graph=initial_graph,**kwargs)
-        # Check whether sample is subgraph of G
-        for s in samples[idx]:
-            if nx.is_isomorphic(s,nx.subgraph(G,s.nodes())):
-                return p
-
-    def likelihood(G,T,X,O):
-        """
-        Compute the likelihood of the data given the parameters.
-        
-        Parameters
-        ----------
-        G : nx.Graph -- The target graph.
-        T : numpy.ndarray -- The assembly tree.
-        X : numpy.ndarray -- Node labels.
-        O : numpy.ndarray -- Binding matrix.
-
-        Returns
-        -------
-        likelihood_val : float -- The likelihood value.
-        """
-        # Create dictionary of tree assemblies
-        pass
+        return - np.log(bell_number) - np.log(Q) - np.log(num_trees)
 
