@@ -1,7 +1,5 @@
 import assembly_tree as at
 import numpy as np
-import matplotlib.pyplot as plt
-import pymc as pm
 import random
 import sympy
 from scipy.special import stirling2
@@ -377,14 +375,14 @@ class AssemblyNode():
 
 
 def expand_tree(tree_dict):
-        stack = [tree_dict]
-        while stack:
-            current = stack.pop()
-            for node_id, node in current.items():
-                if 'data' in node:
-                    node['data'] = np.sort(node['data'].nodes)
-                if 'children' in node:
-                    stack.extend(node['children'])
+    stack = [tree_dict]
+    while stack:
+        current = stack.pop()
+        for node_id, node in current.items():
+            if 'data' in node:
+                node['data'] = np.sort(node['data'].nodes).tolist()
+            if 'children' in node:
+                stack.extend(node['children'])
 
 class DesignMCMC:
     """
@@ -409,7 +407,7 @@ class DesignMCMC:
         """
         self.cur_T = T
         self.proposed_T = copy.copy(T)
-        self.cur_prob = np.log(sum(self.cur_T.Tree.get_node(0).data.p))
+        self.cur_prob = copy.deepcopy(np.log(sum(self.cur_T.Tree.get_node(0).data.p)))
         self.samples = []
         self.log_p = []
         self.unique_samples = []
@@ -443,7 +441,7 @@ class DesignMCMC:
                     prior_val = 0
                 # Get likelihood of tree
                 p = sum(self.proposed_T.Tree.get_node(0).data.p)
-                likelihood_val = np.log(p) if p > 0 else np.log(-10e300) # Avoid log(0) by using a large negative value
+                likelihood_val = np.log(p) if p > 10e-300 else np.log(10e-300) # Avoid log(0) by using a very small value
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
                 # Calculate acceptance probability
@@ -503,30 +501,25 @@ class DesignMCMC:
         """
         # Get all unique assembly trees
         self.unique_samples = []
-        for s in self.samples:
+        self.dist = []
+        count = []
+        for i, s in enumerate(self.samples):
             tree = s.Tree.to_dict(with_data=True)
             expand_tree(tree)
             new = True
-            for k in self.unique_samples:
+            for j, k in enumerate(self.unique_samples):
                 if k == s:
+                    count[k] += 1
+                    self.dist[k] += self.log_p[i]
                     new = False
                     break
             if new:
                 self.unique_samples.append(tree)
-                # Average the log probabilities of unique samples
-        self.dist = np.zeros(len(self.unique_samples))
-        for i, sample in enumerate(self.unique_samples):
-            for j, s in enumerate(self.samples):
-                count = 0
-                cur_tree = s.Tree.to_dict(with_data=True)
-                expand_tree(cur_tree)
-                if cur_tree == sample:
-                    count += 1
-                    # If the sample matches the unique sample, add its log probability
-                    self.dist[i] += self.log_p[j]
-            # Take the mean of the log probabilities for this sample
-            self.dist[i] = self.dist[i] / count if count > 0 else 0
-            self.dist[i] = np.exp(self.dist[i])
+                count.append(1)
+                self.dist.append(self.log_p[i])
+        self.dist = np.array(self.dist)
+        count = np.array(count)
+        self.dist /= count
     
     def recursive_summation(self,depth, current_Q):
         if depth <= 2:
