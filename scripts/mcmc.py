@@ -213,7 +213,7 @@ class AssemblyTree:
             # Get next node label
             all_nodes = self.Tree.all_nodes()
             node_names = [int(n.identifier) for n in all_nodes]
-            next_node = np.max(node_names)
+            next_node = np.max(node_names) + 1
             # Add child to tree
             self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
         
