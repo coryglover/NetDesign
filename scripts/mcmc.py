@@ -210,8 +210,11 @@ class AssemblyTree:
             G = nx.Graph()
             G.add_nodes_from(graph_nodes)
             child = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])
+            # Get next node label
+            all_nodes = self.Tree.all_nodes()
+            next_node = np.max(all_nodes)
             # Add child to tree
-            self.Tree.create_node(data=child, parent=node_id, identifier=self.Tree.size())
+            self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
         
     def merge(self,node_id):
         """
