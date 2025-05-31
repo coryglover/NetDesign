@@ -212,7 +212,7 @@ class AssemblyTree:
             child = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])
             # Get next node label
             all_nodes = self.Tree.all_nodes()
-            node_names = [int(self.Tree.get_node(n).identifier) for n in all_nodes]
+            node_names = [int(n.identifier) for n in all_nodes]
             next_node = np.max(node_names)
             # Add child to tree
             self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
