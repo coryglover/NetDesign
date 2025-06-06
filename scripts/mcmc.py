@@ -257,7 +257,7 @@ class AssemblyTree:
         nodes_to_split = [node_id]
         # Recurivsely split children until all children have no more than 2 nodes in their data
         while len(nodes_to_split) > 0:
-            cur_node = nodes_to_split.pop()
+            cur_node = nodes_to_split.pop(0)
             self.split(cur_node)
             # Get children
             children = self.Tree.get_node(cur_node).successors(self.Tree.identifier)
@@ -265,7 +265,7 @@ class AssemblyTree:
                 if len(self.Tree.get_node(child).data.nodes) > 2:
                     nodes_to_split.append(child)
 
-    def update_prob(self,node_id,prob_tol=10e-5,max_iters=100):
+    def update_prob(self,node_id,prob_tol=10e-5,max_iters=1000):
         """
         Update the probability of a given node assembling into a subgraph of G
         and all of its parents.
@@ -294,7 +294,7 @@ class AssemblyTree:
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
             # Run simulation
-            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
+            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True)
             p = p / sum(p)
             for i,subgraph in enumerate(samples):
                 # Check whether probability is zero
@@ -335,7 +335,7 @@ class AssemblyTree:
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
                 # Run simulation
-                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
+                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True)
                 p = p / np.sum(p)
                 # Check whether sample is subgraph of G
                 for j, s in enumerate(samples):
@@ -454,7 +454,7 @@ class DesignMCMC:
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
                 if np.random.rand() < acceptance_prob:
-                    self.cur_T = self.proposed_T
+                    self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     self.samples.append(copy.deepcopy(self.cur_T))
                     self.log_p.append(posterior)
@@ -487,7 +487,7 @@ class DesignMCMC:
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
                 if np.random.rand() < acceptance_prob:
-                    self.cur_T = self.proposed_T
+                    self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     self.samples.append(copy.deepcopy(self.cur_T))
                     self.log_p.append(posterior)

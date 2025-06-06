@@ -88,7 +88,104 @@ def count_isomorphs(graphs):
             counts[key] = 1
     return counts
 
-def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False):
+def O_respecting_rewiring(g,T):
+    types = nx.get_node_attributes(g,"label")
+    unique_types = np.unique(list(types.values()))
+    k = unique_types.size
+
+    class_to_vs = {type : [] for type in unique_types}
+    for v in g:
+        class_to_vs[types[v]].append(v)
+    
+    for i in range(T):
+        t1,t2 = np.random.choice(unique_types,2)
+        if t1 == t2 and len(class_to_vs[t1])>3:
+            u1,u2,v1,v2 = np.random.choice(class_to_vs[t1],4,replace=False)
+        elif t1 != t2 and len(class_to_vs[t1])>1 and len(class_to_vs[t2])>1:
+            u1,u2 = np.random.choice(class_to_vs[t1],2,replace=False)
+            v1,v2 = np.random.choice(class_to_vs[t2],2,replace=False)
+        else:
+            continue
+        if g.has_edge(u1,v1) and g.has_edge(u2,v2) and not g.has_edge(u1,v2) and not g.has_edge(u2,v1):
+            g.remove_edge(u1,v1)
+            g.remove_edge(u2,v2)
+            g.add_edge(u1,v2)
+            g.add_edge(u2,v1)
+    return g 
+
+def rewire(g,X,O,T,fixed_edges=None):
+    """
+    Rewire a graph while respecting the binding matrix and node labels.
+    Parameters:
+        g (nx.Graph): Input graph.
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        capacity (ndarray): Capacity vector.
+        T (int): Number of rewiring iterations.
+
+    Returns:
+        nx.Graph: Rewired graph.
+    """
+    # Get adjacency matrix
+    A = nx.adjacency_matrix(g).todense()
+    nodes = list(g.nodes())
+    pos_neighbors = X[nodes]@O - A@X[nodes]
+    
+    # Rewire the graph T times
+    for i in range(T):
+        # Choose random pair of nodes
+        u = np.random.choice(g.nodes())
+        # Choose other node of same type
+        u_label = X[u].argmax()
+        if np.sum(X[nodes,u_label]) == 1:
+            continue
+        v = np.random.choice([n for n in g.nodes() if X[n].argmax() == u_label and n != u])
+        # Choose random neighbor of u
+        u_neighbors = list(g.neighbors(u))
+        if len(u_neighbors) == 0:
+            continue
+        u_neighbor = np.random.choice(u_neighbors)
+        if (u,u_neighbor) in fixed_edges or (u_neighbor,u) in fixed_edges:
+            continue
+        # Get neighbor label
+        u_neighbor_label = X[u_neighbor].argmax()
+        # Update pos_neighbors
+        pos_neighbors[nodes.index(u),u_neighbor_label] += 1
+        # Get labels that could create connection
+        possible_labels = np.where(pos_neighbors[nodes.index(u)] > 0)[0]
+        # Get possible rewires for v
+        v_neighbors = list(g.neighbors(v))
+        # Get nodes that can be rewired to u
+        possible_rewires = [n for n in v_neighbors if X[n].argmax() in possible_labels and n != u]
+        # Randomize possible rewires
+        possible_rewires = np.random.permutation(possible_rewires)
+        # Try to rewire
+        success = False
+        for w in possible_rewires:
+            # Update pos_neighbors
+            w_label = X[w].argmax()
+            if (v,w) in fixed_edges or (w,v) in fixed_edges:
+                continue
+            pos_neighbors[nodes.index(w),u_label] += 1
+            # Check if edge can be created
+            if pos_neighbors[nodes.index(u),w_label] > 0 and pos_neighbors[nodes.index(w),u_label] > 0:
+                # Check whether rewire will kill initial graph edge
+                
+                g.remove_edge(u,u_neighbor)
+                g.remove_edge(v,w)
+                g.add_edge(u,w)
+                g.add_edge(v,u_neighbor)
+                pos_neighbors[nodes.index(u),w_label] -= 1
+                pos_neighbors[nodes.index(w),u_label] -= 1
+                success = True
+                break
+            pos_neighbors[nodes.index(v),w_label] -= 1
+        if not success:
+            pos_neighbors[nodes.index(u),u_neighbor_label] -= 1
+    # Return rewired graph
+    return g
+
+def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
     """
     Extract empirical distribution of system.
     
@@ -104,16 +201,24 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         return np.array([max_iters]), [initial_graph], np.array([0])
     if verbose:
         for t in tqdm(range(max_iters)):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
-            if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
-                continue
-            cur_graphs.append(test_g.copy())
+            if not rewire_est or t == 0:
+                test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
+                    continue
+                cur_graphs.append(test_g.copy())
+            else:
+                test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
-            test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
-            if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
-                continue
-            cur_graphs.append(test_g.copy())
+            if not rewire_est or t == 0:
+                test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
+                    continue
+                cur_graphs.append(test_g.copy())
+            else:
+                test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
     sorted_indices = np.array([])
@@ -586,55 +691,14 @@ def measure_stability(X, O, ret_g=False, initial_graph=None, capacity=None,multi
     return cur_graphs
     
 if __name__ == '__main__':
-    # Accept input parameters
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--file',type=str,default=None,help='File of graph')
-    parser.add_argument('--X_file',default=None,type=str,help='X file of graph')
-    parser.add_argument('--tree_dir',default=None,type=str,help='Directory for saving tree')
-    parser.add_argument('--multiedge',type=str,default='False')
-    
-    # Read in parameters
-    args = parser.parse_args()
-    file = args.file
-    X_file = args.X_file
-    tree_dir = args.tree_dir
-    multiedge = args.multiedge
-    if multiedge == 'False':
-        multiedge = False
-    else:
-        multiedge = True
-    # print(file)
-    multiedge = bool(args.multiedge)
-    # Read in graph
-    g = nx.read_edgelist(file,nodetype=int)
-    X = np.loadtxt(X_file)
-    O = extract_O(g,X)
-    
-    deg_cap = extract_deg_cap(g,X)
-    # Add edge capacities
-    nx.set_edge_attributes(g,1,'capacity')
-    
-    assembly_graphs, si, disassembly_tree = approx_assembly_tree(g,X,O,deg_cap,multiedge=True)
-    try:
-        os.mkdir(tree_dir)
-    except:
-        exists = True
-    
-    # Save tree
-    tree_json = disassembly_tree.to_json(with_data=True)
-    with open(f'{tree_dir}/tree.json', 'w') as f:
-        json.dump(tree_json, f)
-    
-    # Save multiplicity index
-    with open(f'{tree_dir}/mi.pickle', 'wb') as handle:
-        pickle.dump(si, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
-    # Save graphs
-    for k in assembly_graphs.keys():
-        nx.write_edgelist(assembly_graphs[k],f'{tree_dir}/graph_{k}.txt')
-    
-    # Isomorphic flag
-    if nx.is_isomorphic(g,assembly_graphs[0]):
-        np.savetxt(f'{tree_dir}/iso_flag.txt',np.array([1]))
-    else:
-        np.savetxt(f'{tree_dir}/iso_flag.txt',np.array([0]))
+    X = np.vstack([np.eye(3) for i in range(2)])
+    O = np.array([[0,1,1],[1,0,1],[1,1,2]])
+    capacity = O.sum(axis=1,dtype=int)
+    target = nx.Graph()
+    target.add_nodes_from(np.arange(6))
+    target.add_edges_from([[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[2,5]])
+    new_g = microcanonical_ensemble(X,O,capacity)
+    draw_network(new_g,X,with_labels=True)
+    for i in range(10):
+        new_g = rewire(new_g,X,O,T=1000)
+        draw_network(new_g,X,with_labels=True)

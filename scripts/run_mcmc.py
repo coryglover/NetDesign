@@ -23,6 +23,9 @@ def main():
     # Ensure output directory exists
     if not os.path.exists(args.output):
         os.makedirs(args.output)
+    
+    # Graph name
+    graph_name = os.path.splitext(os.path.basename(args.graph_file))[0]
 
     # Read in target graph
     target = nx.read_edgelist(args.graph_file, nodetype=int)
@@ -34,7 +37,18 @@ def main():
     capacity = at.extract_deg_cap(target, X).reshape(-1)
     # Initialize first assembly tree
     initial_tree = mcmc.AssemblyTree(target, X, O, capacity)
-
+    if target.number_of_nodes() <= 2:
+        # If the graph has 2 or fewer nodes, we can directly return the initial tree
+        best_trees_dicts = [initial_tree.to_dict(with_data=True)]
+        output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
+        output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
+        with open(output_tree_file, 'w') as f:
+            json.dump(best_trees_dicts, f, indent=4)
+        stats = np.zeros((1,2))
+        stats[:,0] = 1.0
+        stats[:,1] = initial_tree.depth()
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth', comments='')
+        return
     # Run MCMC to find best assembly tree
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     mcmc_obj.run_mcmc(args.num_samples)
@@ -58,8 +72,8 @@ def main():
         mcmc.expand_tree(tree)
 
     # Save the best trees to output directory
-    output_tree_file = os.path.join(args.output, "best_trees.json")
-    output_tree_stats_file = os.path.join(args.output, "best_tree_stats.txt")
+    output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
+    output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
 
     with open(output_tree_file, 'w') as f:
         json.dump(best_trees_dicts, f, indent=4)
