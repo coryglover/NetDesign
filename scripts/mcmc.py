@@ -64,7 +64,7 @@ class AssemblyTree:
     update_prob(node_id)
         Update the probability of a node assembling into a subgraph of the target graph.
     '''
-    def __init__(self, target, X, O, capacity):
+    def __init__(self, target, X, O, capacity, multiedge=False):
         """
         Initialize the AssemblyTree class with the number of nodes.
         
@@ -79,6 +79,7 @@ class AssemblyTree:
         self.Tree = treelib.Tree()
         self.target = target
         self.target_A = nx.adjacency_matrix(self.target).todense()
+        self.multiedge = multiedge
         # Initial graph 
         self.G = nx.Graph()
         self.G.add_nodes_from(self.nodes)
@@ -294,7 +295,7 @@ class AssemblyTree:
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
             # Run simulation
-            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True)
+            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
             p = p / sum(p)
             for i,subgraph in enumerate(samples):
                 # Check whether probability is zero
@@ -335,7 +336,7 @@ class AssemblyTree:
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
                 # Run simulation
-                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True)
+                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
                 p = p / np.sum(p)
                 # Check whether sample is subgraph of G
                 for j, s in enumerate(samples):
@@ -377,6 +378,31 @@ class AssemblyNode():
         self.p = p
         self.count = len(nodes)
 
+def convert_keys_to_int(d):
+    """
+    Recursively convert all keys in a nested dictionary to int, skipping keys that cannot be converted.
+    
+    Parameters
+    ----------
+    d : dict -- The nested dictionary.
+
+    Returns
+    -------
+    dict -- The dictionary with keys converted to int where possible.
+    """
+    if isinstance(d, dict):
+        new_dict = {}
+        for k, v in d.items():
+            try:
+                new_key = int(k)
+            except ValueError:
+                new_key = k  # Keep the original key if it can't be converted
+            new_dict[new_key] = convert_keys_to_int(v)
+        return new_dict
+    elif isinstance(d, list):
+        return [convert_keys_to_int(item) for item in d]
+    else:
+        return d
 
 def expand_tree(tree_dict):
     stack = [tree_dict]
@@ -384,9 +410,10 @@ def expand_tree(tree_dict):
         current = stack.pop()
         for node_id, node in current.items():
             if 'data' in node:
-                node['data'] = np.sort(node['data'].nodes).tolist()
+                node['data'] = np.sort(np.array(node['data'].nodes,dtype=int)).tolist()
             if 'children' in node:
                 stack.extend(node['children'])
+    return convert_keys_to_int(tree_dict)
 
 class DesignMCMC:
     """
