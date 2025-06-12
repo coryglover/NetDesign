@@ -18,6 +18,32 @@ def parse_args():
     parser.add_argument("--output", type=str, required=True, help="Output directory for results.")
     return parser.parse_args()
 
+def convert_keys_to_int(d):
+    """
+    Recursively convert all keys in a nested dictionary to int, skipping keys that cannot be converted.
+    
+    Parameters
+    ----------
+    d : dict -- The nested dictionary.
+
+    Returns
+    -------
+    dict -- The dictionary with keys converted to int where possible.
+    """
+    if isinstance(d, dict):
+        new_dict = {}
+        for k, v in d.items():
+            try:
+                new_key = int(k)
+            except ValueError:
+                new_key = k  # Keep the original key if it can't be converted
+            new_dict[new_key] = convert_keys_to_int(v)
+        return new_dict
+    elif isinstance(d, list):
+        return [convert_keys_to_int(item) for item in d]
+    else:
+        return d
+
 def main():
     args = parse_args()
     # Ensure output directory exists
@@ -89,4 +115,3 @@ if __name__ == "__main__":
 # This script is designed to be run on a cluster with the necessary dependencies installed.
 # It uses argparse to handle command line arguments for flexibility in specifying input files and parameters.
 # Ensure you have the required libraries installed in your environment before running this script.
-    
