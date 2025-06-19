@@ -166,6 +166,9 @@ def rewire(g,X,O,T,fixed_edges=None):
             w_label = X[w].argmax()
             if (v,w) in fixed_edges or (w,v) in fixed_edges:
                 continue
+            # Check whether edges already exist
+            if (v,u_neighbor) in g.edges() or (u_neighbor,v) in g.edges() or (u,w) in g.edges() or (w,u) in g.edges():
+                continue
             pos_neighbors[nodes.index(w),u_label] += 1
             # Check if edge can be created
             if pos_neighbors[nodes.index(u),w_label] > 0 and pos_neighbors[nodes.index(w),u_label] > 0:
