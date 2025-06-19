@@ -115,7 +115,7 @@ def main():
         json.dump(best_trees_dicts, f, indent=4)
     # Save the statistics of the best trees
     stats = np.zeros((1,3))
-    stats[:,0] = mcmc_obj.dist[one_best_sample_idx]
+    stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
     stats[:,1] = min_depth
     stats[:,2] = time.time() - start
     np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth', comments='')

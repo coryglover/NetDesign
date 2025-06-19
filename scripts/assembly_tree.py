@@ -166,6 +166,9 @@ def rewire(g,X,O,T,fixed_edges=None):
             w_label = X[w].argmax()
             if (v,w) in fixed_edges or (w,v) in fixed_edges:
                 continue
+            # Check whether rewired edges exist
+            if (u,w) in g.edges() or (v,u_neighbor) in g.edges():
+                continue
             pos_neighbors[nodes.index(w),u_label] += 1
             # Check if edge can be created
             if pos_neighbors[nodes.index(u),w_label] > 0 and pos_neighbors[nodes.index(w),u_label] > 0:
@@ -201,7 +204,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
         return np.array([max_iters]), [initial_graph], np.array([0])
     if verbose:
         for t in tqdm(range(max_iters)):
-            if not rewire_est or t == 0:
+            if (not rewire_est) or (t == 0):
                 test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
                 if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                     continue
@@ -402,7 +405,7 @@ def microcanonical_ensemble(
     O,
     capacity,
     kappa_a=1.0,
-    kappa_d=0.1,
+    kappa_d=0.01,
     T = 10000,
     max_iters = int(10e6),
     initial_graph = None,
@@ -449,6 +452,7 @@ def microcanonical_ensemble(
     if max_edges:
         cur_edges = 0
         cur_graph = g.copy()
+    
     N = g.number_of_nodes()
     t = 0
     counter = 0
@@ -458,7 +462,7 @@ def microcanonical_ensemble(
     
     # Initialize rates
     rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
-    rates_detach = kappa_d * np.array([1 - g.degree(j) / capacity[labels[i]] for i, j in enumerate(g.nodes())])
+    rates_detach = kappa_d * np.array([1 - g.degree(j) / (capacity[labels[i]] + 1) for i, j in enumerate(g.nodes())])
     rates = np.concatenate((rates_attach, rates_detach))
     # Begin simulation
     while t < T and counter < max_iters:
@@ -515,8 +519,8 @@ def microcanonical_ensemble(
             # Update rates
             rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
 
-            rates_detach[idx_i] = kappa_d * (1 - g.degree(i) / capacity[i_label])
-            rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / capacity[j_label])
+            rates_detach[idx_i] = kappa_d * (1 - g.degree(i) / (capacity[i_label]+1))
+            rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / (capacity[j_label]+1))
             # Update rates
             rates = np.concatenate((rates_attach, rates_detach))
             # print('Attach',i,j,rates_detach[i],rates_detach[j])
@@ -544,7 +548,7 @@ def microcanonical_ensemble(
                 # potential_links[idx_j,labels==i_label] += 1
                 # Update compatibility
                 compatibility = np.heaviside(potential_links,0.0).astype(int)
-                rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / capacity[labels[idx_j]])
+                rates_detach[idx_j] = kappa_d * (1 - g.degree(j) / (capacity[labels[idx_j]]+1))
 
             missing_edges = [edge for edge in true_edges if not g.has_edge(*edge)]
             g.add_edges_from(missing_edges)
@@ -554,7 +558,7 @@ def microcanonical_ensemble(
             compatibility = np.heaviside(potential_links,0.0).astype(int)
             # Update rates
             rates_attach = compatibility[np.triu_indices(N)] * compatibility.T[np.triu_indices(N)] * kappa_a
-            rates_detach[idx_i] = kappa_d * (1 - g.degree(i) / capacity[i_label])
+            rates_detach[idx_i] = kappa_d * (1 - g.degree(i) / (capacity[i_label]+1))
             rates = np.concatenate((rates_attach, rates_detach))
             # If links are removed make sure true edges still exist
             
