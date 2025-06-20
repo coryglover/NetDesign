@@ -48,16 +48,20 @@ def main():
     if target.number_of_nodes() <= 2:
         # If the graph has 2 or fewer nodes, we can directly return the initial tree
         best_trees_dicts = [initial_tree.Tree.to_dict(with_data=True)]
-        for d in best_trees_dicts:
-            mcmc.expand_tree(d)
+        for i, tree in enumerate(best_trees_dicts):
+            best_trees_dicts[i] = mcmc.expand_tree(tree)
+            best_trees_dicts[i]['success'] = 1 if best_samples[i].Tree.success else 0
+
         output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
         output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
         with open(output_tree_file, 'w') as f:
             json.dump(best_trees_dicts, f, indent=4)
-        stats = np.zeros((1,2))
+        stats = np.zeros((1,4))
         stats[:,0] = 1.0
         stats[:,1] = initial_tree.Tree.depth()
-        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth', comments='')
+        stats[:,2] = time.time() - start
+        stats[:,3] = 1
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
         return
     # Run MCMC to find best assembly tree
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
@@ -80,7 +84,7 @@ def main():
     # Expand trees
     for i, tree in enumerate(best_trees_dicts):
         best_trees_dicts[i] = mcmc.expand_tree(tree)
-
+        best_trees_dicts[i]['success'] = 1 if best_samples[i].Tree.success else 0
     # Save the best trees to output directory
     output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
     output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
@@ -92,7 +96,7 @@ def main():
     stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
     stats[:,1] = min_depth
     stats[:,2] = time.time() - start
-    np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth', comments='')
+    np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
     
 if __name__ == "__main__":
     main()

@@ -83,7 +83,9 @@ class AssemblyTree:
         self.G = nx.Graph()
         self.G.add_nodes_from(self.nodes)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
+        self.success = True
         self.update_prob(0)
+        
 
     def update_tree(self,dist=None,max_iters=100):
         """
@@ -302,17 +304,23 @@ class AssemblyTree:
                     node.data.p.append(0)
                     node.data.subgraph.append(None)
                     node.data.success = success
+                    if success is False:
+                        self.success = False
                     continue
                 iso_object = nx.isomorphism.GraphMatcher(self.target,subgraph)
                 if iso_object.subgraph_is_isomorphic():
                     node.data.p.append(p[i])
                     node.data.subgraph.append(subgraph)
                     node.data.success = success
+                    if success is False:
+                        self.success = False
                     break
                 else:
                     node.data.p.append(0)
                     node.data.subgraph.append(subgraph)
                     node.data.success = success
+                    if success is False:
+                        self.success = False
         else:
             # Get all possible subgraph combinations
             subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
@@ -346,12 +354,14 @@ class AssemblyTree:
                     if iso_object.subgraph_is_isomorphic() and p[j] > prob_tol:
                         node.data.p.append(p[j]*probs[i])
                         node.data.subgraph.append(s)
-                        node.data.success = success
+                        if success is False:
+                            self.success = False
                         break
                     else:
                         node.data.p.append(0)
                         node.data.subgraph.append(s)
-                        node.data.success = success
+                        if success is False:
+                            self.success = False
 
 class AssemblyNode():
     """
