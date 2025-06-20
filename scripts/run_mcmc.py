@@ -50,7 +50,7 @@ def main():
         best_trees_dicts = [initial_tree.Tree.to_dict(with_data=True)]
         for i, tree in enumerate(best_trees_dicts):
             best_trees_dicts[i] = mcmc.expand_tree(tree)
-            best_trees_dicts[i]['success'] = 1 if best_samples[i].Tree.success else 0
+            best_trees_dicts[i]['success'] = 1
 
         output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
         output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
@@ -84,7 +84,7 @@ def main():
     # Expand trees
     for i, tree in enumerate(best_trees_dicts):
         best_trees_dicts[i] = mcmc.expand_tree(tree)
-        best_trees_dicts[i]['success'] = 1 if best_samples[i].Tree.success else 0
+        best_trees_dicts[i] = 1 if best_samples[i].success else 0
     # Save the best trees to output directory
     output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
     output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
