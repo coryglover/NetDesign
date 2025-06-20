@@ -302,7 +302,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
     success = True
     cur_graphs = []
     if initial_graph is not None and initial_graph.number_of_nodes() == 1:
-        return np.array([max_iters]), [initial_graph], np.array([0])
+        return np.array([max_iters]), [initial_graph], np.array([0]), True
     if verbose:
         for t in tqdm(range(max_iters)):
             if not rewire_est:
