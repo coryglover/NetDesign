@@ -9,7 +9,6 @@ from itertools import product
 import copy
 from tqdm import tqdm
 
-
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
     partitions_dicts = list(sympy.utilities.iterables.partitions(n,m=m))
@@ -295,22 +294,25 @@ class AssemblyTree:
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
             # Run simulation
-            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
+            p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
             p = p / sum(p)
             for i,subgraph in enumerate(samples):
                 # Check whether probability is zero
                 if p[i] < prob_tol:
                     node.data.p.append(0)
                     node.data.subgraph.append(None)
+                    node.data.success = success
                     continue
                 iso_object = nx.isomorphism.GraphMatcher(self.target,subgraph)
                 if iso_object.subgraph_is_isomorphic():
                     node.data.p.append(p[i])
                     node.data.subgraph.append(subgraph)
+                    node.data.success = success
                     break
                 else:
                     node.data.p.append(0)
                     node.data.subgraph.append(subgraph)
+                    node.data.success = success
         else:
             # Get all possible subgraph combinations
             subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
@@ -336,7 +338,7 @@ class AssemblyTree:
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
                 # Run simulation
-                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
+                p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
                 p = p / np.sum(p)
                 # Check whether sample is subgraph of G
                 for j, s in enumerate(samples):
@@ -344,10 +346,12 @@ class AssemblyTree:
                     if iso_object.subgraph_is_isomorphic() and p[j] > prob_tol:
                         node.data.p.append(p[j]*probs[i])
                         node.data.subgraph.append(s)
+                        node.data.success = success
                         break
                     else:
                         node.data.p.append(0)
                         node.data.subgraph.append(s)
+                        node.data.success = success
 
 class AssemblyNode():
     """
@@ -377,6 +381,7 @@ class AssemblyNode():
         self.subgraph = subgraph
         self.p = p
         self.count = len(nodes)
+        self.success = np.nan
 
 def convert_keys_to_int(d):
     """

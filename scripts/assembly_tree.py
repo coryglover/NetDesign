@@ -13,6 +13,8 @@ import pickle
 import copy
 import json
 from tqdm import tqdm
+from scipy.optimize import milp
+from scipy.optimize import LinearConstraint
 
 def cut_graph(g,pairs):
     cutset = set()
@@ -113,6 +115,102 @@ def O_respecting_rewiring(g,T):
             g.add_edge(u2,v1)
     return g 
 
+def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp=False,ret_edges=False):
+    """
+    Using linear programming, find the optimal number of edges in a microcanonical ensemble graph
+    given the node features X, the edge features O, and the capacity constraints.
+
+    Parameters
+    ----------
+    X (ndarray): Label matrix
+    O (ndarray): Binding matrix
+    capacity (ndarray): Capacity vector
+    initial_graph (networkx.Graph, optional): Initial graph to start the optimization from.
+    solution (bool): If True, return the solution vector, otherwise return the number of edges.
+    disp (bool): If True, display the optimization process.
+    ret_edges (bool): If True, return the edges of the optimal graph.
+
+    Returns
+    -------
+    int or ndarray: The optimal number of edges in the microcanonical ensemble graph.
+    """
+    # Get number of nodes and possible edges
+    
+
+    if initial_graph is None:
+        initial_graph = nx.Graph()
+        initial_graph.add_nodes_from(N)
+        N = X.shape[0]    
+    nodes = list(initial_graph.nodes())
+    N = len(nodes)
+    pos_edges = N*(N-1) // 2
+
+
+    # Create the constraint matrix
+    capacity_constraints = np.zeros((N,pos_edges))
+    O_constraints = np.zeros((O.shape[0]*N,pos_edges))
+    idx_i, idx_j = np.triu_indices(N,k=1,m=N)
+    for i in range(N):
+        for j in range(len(idx_i)):
+            if idx_i[j] == i or idx_j[j] == i:
+                capacity_constraints[i,j] = 1
+                for k in range(O.shape[0]):
+                    if idx_i[j] == i:
+                        O_constraints[i*O.shape[0]+k,j] = X[nodes[idx_j[j]],k]
+                    else:
+                        O_constraints[i*O.shape[0]+k,j] = X[nodes[idx_i[j]],k]
+    constraint_mat = np.vstack([capacity_constraints, O_constraints])
+    # Remove constraints that refer to existing edges
+    edges = np.array(list(initial_graph.edges()))
+    edges_idx = []
+    for e1, e2 in edges:
+        # Get index of nodes in node list
+        idx_e1 = nodes.index(e1)
+        idx_e2 = nodes.index(e2)
+        # Find (e1,e2) in idx_i and idx_j
+        edges_idx.append(int(np.where((idx_i == idx_e1) & (idx_j == idx_e2))[0][0]))
+    # Remove columns associated with existing edges
+    constraint_mat = np.delete(constraint_mat, edges_idx, axis=1)
+    # Create the bounds
+    A = nx.adjacency_matrix(initial_graph).todense()
+    deg = initial_graph.degree()
+    b_u = np.hstack((X[nodes,:]@capacity - np.array([deg[i] for i in nodes]),(X[nodes,:]@O - A@X[nodes,:]).flatten()))
+    b_l = np.zeros_like(b_u)
+    # Create the solution coefficients
+    c = -np.ones(pos_edges - len(edges_idx))
+    integrality = np.ones_like(c)
+    # Create the linear constraint
+    constraints = LinearConstraint(constraint_mat, b_l, b_u)
+    # Solve the linear programming problem
+    res = milp(c=c, constraints=constraints, integrality=integrality, bounds=(0,1), options={'disp':disp})
+    if res.success:
+        if solution:
+            if ret_edges:
+                added_edges = []
+                for i in range(len(nodes)):
+                    for j in range(i+1, len(nodes)):
+                        added_edges.append((nodes[i], nodes[j]))
+                added_edges = np.array([e for e in added_edges if e not in initial_graph.edges()])
+                return res.x, added_edges[res.x.astype(int) == 1,:]
+            return res.x
+        else:
+            if ret_edges:
+                added_edges = []
+                for i in range(len(nodes)):
+                    for j in range(i+1, len(nodes)):
+                        added_edges.append((nodes[i], nodes[j]))
+                added_edges = np.array([e for e in added_edges if e not in initial_graph.edges()])
+                return -int(res.fun), added_edges[res.x.astype(int) == 1,:]
+            return -int(res.fun)
+    else:
+        if solution:
+            if ret_edges:
+                return None, None
+            return None
+        if ret_edges:
+            return None, None
+        return None
+
 def rewire(g,X,O,T,fixed_edges=None):
     """
     Rewire a graph while respecting the binding matrix and node labels.
@@ -145,7 +243,7 @@ def rewire(g,X,O,T,fixed_edges=None):
         if len(u_neighbors) == 0:
             continue
         u_neighbor = np.random.choice(u_neighbors)
-        if (u,u_neighbor) in fixed_edges or (u_neighbor,u) in fixed_edges:
+        if (u,u_neighbor) in fixed_edges or (u_neighbor,u) in fixed_edges or v == u_neighbor:
             continue
         # Get neighbor label
         u_neighbor_label = X[u_neighbor].argmax()
@@ -162,6 +260,8 @@ def rewire(g,X,O,T,fixed_edges=None):
         # Try to rewire
         success = False
         for w in possible_rewires:
+            if w == u:
+                continue
             # Update pos_neighbors
             w_label = X[w].argmax()
             if (v,w) in fixed_edges or (w,v) in fixed_edges:
@@ -199,29 +299,56 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
     Returns:
         int - stability index
     """
+    success = True
     cur_graphs = []
     if initial_graph is not None and initial_graph.number_of_nodes() == 1:
         return np.array([max_iters]), [initial_graph], np.array([0])
     if verbose:
         for t in tqdm(range(max_iters)):
-            if not rewire_est or t == 0:
+            if not rewire_est:
                 test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
                 if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                     continue
                 cur_graphs.append(test_g.copy())
             else:
-                test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
-                cur_graphs.append(test_g.copy())
+                if t == 0:
+                    A_flat, edges = find_optimal_edge_count(X,O,capacity,initial_graph=initial_graph.copy(),solution=False,disp=False,ret_edges=True)
+                    if A_flat is None:
+                        success = False
+                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                        if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
+                            continue
+                    else:
+                        test_g = initial_graph.copy()
+                        test_g.add_edges_from(edges)
+                    cur_graphs.append(test_g.copy())
+                else:
+                    # cur_graphs.append(test_g.copy())
+                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
-            if not rewire_est or t == 0:
+            if not rewire_est:
                 test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
                 if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                     continue
                 cur_graphs.append(test_g.copy())
             else:
-                test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
-                cur_graphs.append(test_g.copy())
+                if t == 0:
+                    A_flat, edges = find_optimal_edge_count(X,O,capacity,initial_graph=initial_graph.copy(),solution=False,disp=False,ret_edges=True)
+                    if A_flat is None:
+                        success = False
+                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                        if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
+                            continue
+                    else:
+                        test_g = initial_graph.copy()
+                        test_g.add_edges_from(edges)
+                    cur_graphs.append(test_g.copy())
+                else:
+                    # cur_graphs.append(test_g.copy())
+                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
     sorted_indices = np.array([])
@@ -271,7 +398,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
             counts = np.array(counts)
             sorted_indices = np.argsort(counts)[::-1]
             counts = list(counts)
-    return np.array(counts), final_graphs, sorted_indices
+    return np.array(counts), final_graphs, sorted_indices, success
 
 def entropy(x):
     return - np.sum(x * np.log(x + 1e-10))
