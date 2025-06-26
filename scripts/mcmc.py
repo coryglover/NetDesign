@@ -105,12 +105,15 @@ class AssemblyTree:
         if operation == 'split':
             # Make list of leaves with more than 2 nodes
             leaves = self.Tree.leaves()
-            leaves = [leaf for leaf in leaves if (len(leaf.data.p) != 1 or leaf.data.p[0] != 1)]
+            leaves = [leaf for leaf in leaves if (len(leaf.data.nodes) >2 )]
             if len(leaves) == 0:
                 # print('No update performed')
                 return False
             # Get node ID
-            node_id = random.choice(leaves).identifier
+            probs = [len(leaf.data.nodes) for leaf in leaves]
+            probs = np.array(probs) / sum(probs)
+            idx = np.random.choice(len(leaves),p=probs)
+            node_id = leaves[idx].identifier
             # Split node
             self.split(node_id)
         elif operation == 'merge':
@@ -163,7 +166,11 @@ class AssemblyTree:
                 # print('No update performed')
                 return False
             # Get node ID
-            node_id = random.choice(leaves).identifier
+            probs = [len(leaf.data.nodes) for leaf in leaves]
+            probs = np.array(probs) / sum(probs)
+            idx = np.random.choice(len(leaves),p=probs)
+            node_id = leaves[idx].identifier
+        
             # Complete branch
             self.complete_branch(node_id)
         # Update probability of node assembling into a subgraph of G
