@@ -69,7 +69,7 @@ def main():
     time_int = args.num_samples // 100
     for i in range(100):
         mcmc_obj.run_mcmc(time_int)
-        if time.time() - start > 82800:
+        if time.time() - start > 175000:
             break
 
     # Save the results
