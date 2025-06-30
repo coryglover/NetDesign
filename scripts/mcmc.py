@@ -169,7 +169,7 @@ class AssemblyTree:
             # Get node ID
             #probs = [len(leaf.data.nodes) for leaf in leaves]
             #probs = np.array(probs) / sum(probs)
-            prob = 1 / len(leaves) * np.ones(len(leaves))
+            probs = 1 / len(leaves) * np.ones(len(leaves))
             idx = np.random.choice(len(leaves),p=probs)
             node_id = leaves[idx].identifier
         
