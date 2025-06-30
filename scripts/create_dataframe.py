@@ -61,10 +61,10 @@ def read_json_tree(json_tree):
 
 args = parse_args()
 print(args)
-with open('/scratch/glover.co/NetDesign/data/properties.json','r') as f:
+with open('/Users/glover.co/Documents/laszlo/NetDesign/data/properties.json','r') as f:
     properties = json.load(f)
 properties = properties['proteins']
-print(properties)
+
 # Initialize dataframe
 df = pd.DataFrame(columns=['type',
                            'basename',
@@ -78,9 +78,12 @@ df = pd.DataFrame(columns=['type',
                            'clustering',
                            'Oness',
                            'N_types',
+                           'largest_cycle',
                            'tree_num',
                            'depth',
-                           'leaves'])
+                           'leaves',
+                           'accuracy',
+                           'min_depth'])
 
 # Get subdirectory names
 subdirs = os.listdir(args.dir)
@@ -108,8 +111,11 @@ for subdir in subdirs:
             tree = read_json_tree(f)
         except:
             continue
+        tree_stats = np.loadtxt(args.dir + subdir + '/treefiles/' + basename + '_tree_stats.txt',delimiter=',',skiprows=1)
         # Calculate properties
         property_dict = properties[subdir][basename]
+        cycle_basis = nx.cycle_basis(g)
+        largest_cycle = max(cycle_basis,key=len) if cycle_basis else []
         for j,t in enumerate(tree):
             data = []
             data.append(subdir)
@@ -124,9 +130,12 @@ for subdir in subdirs:
             data.append(property_dict['clustering'])
             data.append(property_dict['Oness'])
             data.append(X.shape[1])
+            data.append(len(largest_cycle))
             data.append(j)
             data.append(t.depth())
             data.append(len(t.leaves()))
+            data.append(tree_stats[0])
+            data.append(tree_stats[1])
             df.loc[len(df)] = data
 # Save DataFrame to CSV
 df.to_csv(args.dir + 'protein_dataframe.csv', index=False)
