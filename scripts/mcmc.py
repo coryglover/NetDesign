@@ -9,7 +9,6 @@ from itertools import product
 import copy
 from tqdm import tqdm
 
-
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
     partitions_dicts = list(sympy.utilities.iterables.partitions(n,m=m))
@@ -64,7 +63,7 @@ class AssemblyTree:
     update_prob(node_id)
         Update the probability of a node assembling into a subgraph of the target graph.
     '''
-    def __init__(self, target, X, O, capacity):
+    def __init__(self, target, X, O, capacity, multiedge=False):
         """
         Initialize the AssemblyTree class with the number of nodes.
         
@@ -79,11 +78,14 @@ class AssemblyTree:
         self.Tree = treelib.Tree()
         self.target = target
         self.target_A = nx.adjacency_matrix(self.target).todense()
+        self.multiedge = multiedge
         # Initial graph 
         self.G = nx.Graph()
         self.G.add_nodes_from(self.nodes)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
+        self.success = True
         self.update_prob(0)
+        
 
     def update_tree(self,dist=None,max_iters=100):
         """
@@ -103,12 +105,16 @@ class AssemblyTree:
         if operation == 'split':
             # Make list of leaves with more than 2 nodes
             leaves = self.Tree.leaves()
-            leaves = [leaf for leaf in leaves if (len(leaf.data.p) != 1 or leaf.data.p[0] != 1)]
+            leaves = [leaf for leaf in leaves if (len(leaf.data.nodes) >2 )]
             if len(leaves) == 0:
                 # print('No update performed')
                 return False
             # Get node ID
-            node_id = random.choice(leaves).identifier
+            #probs = [len(leaf.data.nodes) for leaf in leaves]
+            #probs = np.array(probs) / sum(probs)
+            probs = 1/len(leaves) * np.ones(len(leaves))
+            idx = np.random.choice(len(leaves),p=probs)
+            node_id = leaves[idx].identifier
             # Split node
             self.split(node_id)
         elif operation == 'merge':
@@ -161,7 +167,12 @@ class AssemblyTree:
                 # print('No update performed')
                 return False
             # Get node ID
-            node_id = random.choice(leaves).identifier
+            #probs = [len(leaf.data.nodes) for leaf in leaves]
+            #probs = np.array(probs) / sum(probs)
+            probs = 1 / len(leaves) * np.ones(len(leaves))
+            idx = np.random.choice(len(leaves),p=probs)
+            node_id = leaves[idx].identifier
+        
             # Complete branch
             self.complete_branch(node_id)
         # Update probability of node assembling into a subgraph of G
@@ -210,8 +221,12 @@ class AssemblyTree:
             G = nx.Graph()
             G.add_nodes_from(graph_nodes)
             child = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])
+            # Get next node label
+            all_nodes = self.Tree.all_nodes()
+            node_names = [int(n.identifier) for n in all_nodes]
+            next_node = np.max(node_names) + 1
             # Add child to tree
-            self.Tree.create_node(data=child, parent=node_id, identifier=self.Tree.size())
+            self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
         
     def merge(self,node_id):
         """
@@ -253,7 +268,7 @@ class AssemblyTree:
         nodes_to_split = [node_id]
         # Recurivsely split children until all children have no more than 2 nodes in their data
         while len(nodes_to_split) > 0:
-            cur_node = nodes_to_split.pop()
+            cur_node = nodes_to_split.pop(0)
             self.split(cur_node)
             # Get children
             children = self.Tree.get_node(cur_node).successors(self.Tree.identifier)
@@ -261,7 +276,7 @@ class AssemblyTree:
                 if len(self.Tree.get_node(child).data.nodes) > 2:
                     nodes_to_split.append(child)
 
-    def update_prob(self,node_id,prob_tol=10e-5,max_iters=100):
+    def update_prob(self,node_id,prob_tol=10e-5,max_iters=1000):
         """
         Update the probability of a given node assembling into a subgraph of G
         and all of its parents.
@@ -290,22 +305,31 @@ class AssemblyTree:
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
             # Run simulation
-            p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
+            p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
             p = p / sum(p)
             for i,subgraph in enumerate(samples):
                 # Check whether probability is zero
                 if p[i] < prob_tol:
                     node.data.p.append(0)
                     node.data.subgraph.append(None)
+                    node.data.success = success
+                    if success is False:
+                        self.success = False
                     continue
                 iso_object = nx.isomorphism.GraphMatcher(self.target,subgraph)
                 if iso_object.subgraph_is_isomorphic():
                     node.data.p.append(p[i])
                     node.data.subgraph.append(subgraph)
+                    node.data.success = success
+                    if success is False:
+                        self.success = False
                     break
                 else:
                     node.data.p.append(0)
                     node.data.subgraph.append(subgraph)
+                    node.data.success = success
+                    if success is False:
+                        self.success = False
         else:
             # Get all possible subgraph combinations
             subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
@@ -331,7 +355,7 @@ class AssemblyTree:
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
                 # Run simulation
-                p, samples, idx = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters)
+                p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
                 p = p / np.sum(p)
                 # Check whether sample is subgraph of G
                 for j, s in enumerate(samples):
@@ -339,10 +363,14 @@ class AssemblyTree:
                     if iso_object.subgraph_is_isomorphic() and p[j] > prob_tol:
                         node.data.p.append(p[j]*probs[i])
                         node.data.subgraph.append(s)
+                        if success is False:
+                            self.success = False
                         break
                     else:
                         node.data.p.append(0)
                         node.data.subgraph.append(s)
+                        if success is False:
+                            self.success = False
 
 class AssemblyNode():
     """
@@ -372,7 +400,33 @@ class AssemblyNode():
         self.subgraph = subgraph
         self.p = p
         self.count = len(nodes)
+        self.success = np.nan
 
+def convert_keys_to_int(d):
+    """
+    Recursively convert all keys in a nested dictionary to int, skipping keys that cannot be converted.
+    
+    Parameters
+    ----------
+    d : dict -- The nested dictionary.
+
+    Returns
+    -------
+    dict -- The dictionary with keys converted to int where possible.
+    """
+    if isinstance(d, dict):
+        new_dict = {}
+        for k, v in d.items():
+            try:
+                new_key = int(k)
+            except ValueError:
+                new_key = k  # Keep the original key if it can't be converted
+            new_dict[new_key] = convert_keys_to_int(v)
+        return new_dict
+    elif isinstance(d, list):
+        return [convert_keys_to_int(item) for item in d]
+    else:
+        return d
 
 def expand_tree(tree_dict):
     stack = [tree_dict]
@@ -380,9 +434,10 @@ def expand_tree(tree_dict):
         current = stack.pop()
         for node_id, node in current.items():
             if 'data' in node:
-                node['data'] = np.sort(node['data'].nodes).tolist()
+                node['data'] = np.sort(np.array(node['data'].nodes,dtype=int)).tolist()
             if 'children' in node:
                 stack.extend(node['children'])
+    return convert_keys_to_int(tree_dict)
 
 class DesignMCMC:
     """
@@ -450,7 +505,7 @@ class DesignMCMC:
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
                 if np.random.rand() < acceptance_prob:
-                    self.cur_T = self.proposed_T
+                    self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     self.samples.append(copy.deepcopy(self.cur_T))
                     self.log_p.append(posterior)
@@ -483,7 +538,7 @@ class DesignMCMC:
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
                 if np.random.rand() < acceptance_prob:
-                    self.cur_T = self.proposed_T
+                    self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     self.samples.append(copy.deepcopy(self.cur_T))
                     self.log_p.append(posterior)
