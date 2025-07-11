@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--X_file", type=str, required=True, help="Path to the X matrix file.")
     parser.add_argument("--num_samples", type=int, default=10000, help="Number of samples to draw in MCMC.")
     parser.add_argument("--output", type=str, required=True, help="Output directory for results.")
+    parser.add_argument("--c_exclusive",action="store_true",default=False)
     parser.add_argument("--multiedge", type=int, required=False, default = 0, help="1 if multiedge")
     return parser.parse_args()
 
@@ -38,7 +39,10 @@ def main():
     #O = at.extract_O(target, X)
     # Get capacity vector
     capacity = at.extract_deg_cap(target, X).reshape(-1)
-    O = (np.ones((X.shape[1],X.shape[1])) * capacity).T
+    if args.c_exclusive:
+        O = (np.ones((X.shape[1],X.shape[1])) * capacity).T
+    else:
+        O = at.extract_O(target, X)
     # Get whether multiedge
     if args.multiedge == 0:
         multiedge = False
@@ -46,7 +50,7 @@ def main():
         multiedge = True
     # Initialize first assembly tree
     initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
-    if target.number_of_nodes() <= 2:
+    if target.number_of_nodes() <= 2 or max(initial_tree.Tree.get_node(0).data.p) == 1.0:
         # If the graph has 2 or fewer nodes, we can directly return the initial tree
         best_trees_dicts = [initial_tree.Tree.to_dict(with_data=True)]
         for i, tree in enumerate(best_trees_dicts):
@@ -69,7 +73,8 @@ def main():
     time_int = args.num_samples // 100
     for i in range(100):
         mcmc_obj.run_mcmc(time_int)
-        if time.time() - start > 3600:
+        print(i,flush=True)
+        if time.time() - start > 1800:
 
     # Save the results
     # Get the best performing trees
