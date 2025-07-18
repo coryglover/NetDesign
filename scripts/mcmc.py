@@ -98,9 +98,9 @@ class AssemblyTree:
         # Get list of old leaves 
         old_leaves = self.Tree.leaves()
         if dist is None:
-            operation = np.random.choice(['split','merge','redistribute','complete_branch'],p=[0.25,0.25,0.25,0.25])
+            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point'],p=[0.2,0.2,0.2,0.2,0.2])
         else:
-            operation = np.random.choice(['split','merge','redistribute','complete_branch'],p=dist)
+            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point'],p=dist)
         # Perform opertation
         if operation == 'split':
             # Make list of leaves with more than 2 nodes
@@ -175,23 +175,41 @@ class AssemblyTree:
         
             # Complete branch
             self.complete_branch(node_id)
-        # Update probability of node assembling into a subgraph of G
-        # Get children of node
+        elif operation == "add_branching_point":
+            treenodes = self.Tree.all_nodes()
+            treenodes = [treenode for treenode in treenodes if len(self.Tree.children(treenode.identifier))>2]
+            
+            if len(treenodes) == 0:
+                return False
+            node_id = random.choice(treenodes)
+            self.add_branching_point(node_id.identifier)
+            node_names = [int(n.identifier) for n in self.Tree.all_nodes()]
+            nodes_to_update = [self.Tree.get_node(np.max(node_names))]
+            while len(nodes_to_update) > 0:
+                node = nodes_to_update.pop(0)
+                self.update_prob(node.identifier,max_iters=max_iters)
+                if self.Tree.parent(node.identifier) is not None:
+                    parent = self.Tree.parent(node.identifier)
+                    nodes_to_update.append(parent)
 
-        # Update relevant leaf nodes
-        new_leaves = self.Tree.leaves()
-        # Get difference between old and new leaves
-        nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
-        # Update probability of all new leaves
-        while len(nodes_to_update) > 0:
-            leaf = nodes_to_update.pop(0)
-            self.update_prob(leaf.identifier,max_iters=max_iters)
-            if self.Tree.parent(leaf.identifier) is not None:
-                # Get parent node
-                parent = self.Tree.parent(leaf.identifier)
-                nodes_to_update.append(parent)
-                # Order nodes by depth
-                nodes_to_update = sorted(nodes_to_update, key=lambda x: self.Tree.depth(x), reverse=True)
+        if operation != "add_branching_point":
+            # Update probability of node assembling into a subgraph of G
+            # Get children of node
+
+            # Update relevant leaf nodes
+            new_leaves = self.Tree.leaves()
+            # Get difference between old and new leaves
+            nodes_to_update = [leaf for leaf in new_leaves if leaf not in old_leaves]
+            # Update probability of all new leaves
+            while len(nodes_to_update) > 0:
+                leaf = nodes_to_update.pop(0)
+                self.update_prob(leaf.identifier,max_iters=max_iters)
+                if self.Tree.parent(leaf.identifier) is not None:
+                    # Get parent node
+                    parent = self.Tree.parent(leaf.identifier)
+                    nodes_to_update.append(parent)
+                    # Order nodes by depth
+                    nodes_to_update = sorted(nodes_to_update, key=lambda x: self.Tree.depth(x), reverse=True)
 
     def split(self,node_id):
         """
@@ -227,6 +245,28 @@ class AssemblyTree:
             next_node = np.max(node_names) + 1
             # Add child to tree
             self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
+    
+    def add_branching_point(self,node_id):
+        
+        if len(self.Tree.children(node_id)) == 3:
+            children_to_merge = random.sample(self.Tree.children(node_id),2)
+        else:
+            children_to_merge = random.sample(self.Tree.children(node_id),random.randint(2,len(self.Tree.children(node_id))-1))
+        graph_nodes = []
+        for c in children_to_merge:
+            node = self.Tree.get_node(c.identifier)
+            graph_node_list = node.data.nodes
+            graph_nodes += graph_node_list
+        
+        branch_node = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])      
+
+        all_nodes = self.Tree.all_nodes()
+        node_names = [int(n.identifier) for n in all_nodes]
+        next_node = np.max(node_names) + 1
+        self.Tree.create_node(data = branch_node, parent = node_id, identifier = next_node)
+        for c in children_to_merge:
+            self.Tree.move_node(c.identifier,next_node)
+
         
     def merge(self,node_id):
         """
@@ -275,6 +315,9 @@ class AssemblyTree:
             for child in children:
                 if len(self.Tree.get_node(child).data.nodes) > 2:
                     nodes_to_split.append(child)
+
+    
+
 
     def update_prob(self,node_id,prob_tol=10e-5,max_iters=1000):
         """
