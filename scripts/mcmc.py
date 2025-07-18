@@ -467,9 +467,11 @@ class DesignMCMC:
         self.log_p = []
         self.unique_samples = []
         self.dist = []
+        self.best_logp = self.cur_prob#-200
+        self.best_Ts = [T]
         pass
     
-    def run_mcmc(self, num_samples, prior='uniform',verbose=False):
+    def run_mcmc(self, num_samples, Tis, prior='uniform',verbose=False, MAPonly = True):
         """
         Run the MCMC sampling algorithm.
         
@@ -483,6 +485,7 @@ class DesignMCMC:
         """
         if not verbose:
             for i in range(num_samples):
+                Ti = Tis[i]#T0*(1- i/num_samples)
                 # Propose a new tree
                 update_success = False
                 while update_success == False:
@@ -499,21 +502,30 @@ class DesignMCMC:
                 likelihood_val = np.log(p) if p > 10e-300 else np.log(10e-300) # Avoid log(0) by using a very small value
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
+
                 # Calculate acceptance probability
-                acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                #acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                acceptance_prob = np.exp(np.min([0, 1.0/Ti*(posterior - self.cur_prob)]))
                 # Print acceptance probability, prior_val and likelihood_val
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
+                
+
                 if np.random.rand() < acceptance_prob:
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
-                    self.samples.append(copy.deepcopy(self.cur_T))
-                    self.log_p.append(posterior)
+                    if MAPonly:
+                        self.update_best()
+                    if not MAPonly:
+                        self.samples.append(copy.deepcopy(self.cur_T))
+                        self.log_p.append(posterior)
                 else:
                     # If not accepted, revert to the current tree
                     self.proposed_T = copy.deepcopy(self.cur_T)
-                    self.samples.append(copy.deepcopy(self.cur_T))
-                    self.log_p.append(copy.deepcopy(self.cur_prob))
+                    if not MAPonly:
+                        self.samples.append(copy.deepcopy(self.cur_T))
+                        self.log_p.append(copy.deepcopy(self.cur_prob))
+
         else:
             for i in tqdm(range(num_samples)):
                 # Propose a new tree
@@ -533,7 +545,8 @@ class DesignMCMC:
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
                 # Calculate acceptance probability
-                acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                #acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
+                acceptance_prob = np.min([0, 1/Ti*(posterior - self.cur_prob)])
                 # Print acceptance probability, prior_val and likelihood_val
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
@@ -548,7 +561,28 @@ class DesignMCMC:
                     self.samples.append(copy.deepcopy(self.cur_T))
                     self.log_p.append(copy.deepcopy(self.cur_prob))
         # Update the estimated probability distribution of the assembly tree
-        self.update_dist()
+        if not MAPonly:
+            self.update_dist()
+    
+    def update_best(self):
+        if self.cur_prob > self.best_logp:
+            self.best_logp = self.cur_prob
+            #tree = self.cur_T.Tree.to_dict(with_data=True)
+            #expand_tree(tree)
+            self.best_Ts = [self.cur_T]
+
+        elif self.cur_prob == self.best_logp:
+            #tree = self.cur_T.Tree.to_dict(with_data=True)
+            #expand_tree(tree)
+            for i, t in enumerate(self.best_Ts):
+                new = True
+                #tree = t.Tree.to_dict(with_data=True)
+                #expand_tree(tree)
+                if t == self.cur_T:
+                    new = False
+                    break
+            if new:
+                self.best_Ts.append(self.cur_T)
     
     def update_dist(self):
         """

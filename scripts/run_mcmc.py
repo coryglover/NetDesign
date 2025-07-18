@@ -19,6 +19,7 @@ def parse_args():
     parser.add_argument("--output", type=str, required=True, help="Output directory for results.")
     parser.add_argument("--c_exclusive",action="store_true",default=False)
     parser.add_argument("--multiedge", type=int, required=False, default = 0, help="1 if multiedge")
+    parser.add_argument("--MAPonly", type=int, required=False, default = 1, help="Only care about the MAP")
     return parser.parse_args()
 
 def main():
@@ -71,16 +72,24 @@ def main():
     # Run MCMC to find best assembly tree
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     time_int = args.num_samples // 100
+    Tis = np.linspace(5,25,args.num_samples)[::-1]
     for i in range(100):
-        mcmc_obj.run_mcmc(time_int)
+        print(np.exp(mcmc_obj.best_logp))
         print(i,flush=True)
+        mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)])
+        
+        
         if time.time() - start > 1800:
+    
 
     # Save the results
     # Get the best performing trees
-            one_best_sample_idx = np.argmax(mcmc_obj.dist)
-            best_samples_idx = np.where(mcmc_obj.dist == mcmc_obj.dist[one_best_sample_idx])[0]
-            best_samples = [mcmc_obj.samples[i] for i in best_samples_idx]
+            if not args.MAPonly:
+                one_best_sample_idx = np.argmax(mcmc_obj.dist)
+                best_samples_idx = np.where(mcmc_obj.dist == mcmc_obj.dist[one_best_sample_idx])[0]
+                best_samples = [mcmc_obj.samples[i] for i in best_samples_idx]
+            else:
+                best_samples = mcmc_obj.best_Ts
 
     # Get depths of best performing trees
             depths = [samples.Tree.depth() for samples in best_samples]
@@ -112,7 +121,10 @@ def main():
                 json.dump(unique_trees, f, indent=4)
     # Save the statistics of the best trees
             stats = np.zeros((1,3))
-            stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
+            if not args.MAPonly:
+                stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
+            else:
+                stats[:,0] = np.exp(mcmc_obj.best_logp)
             stats[:,1] = min_depth
             stats[:,2] = time.time() - start
             np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
@@ -120,9 +132,16 @@ def main():
             if stats[:,0] == 1.0:
                 break
 
-    one_best_sample_idx = np.argmax(mcmc_obj.dist)
-    best_samples_idx = np.where(mcmc_obj.dist == mcmc_obj.dist[one_best_sample_idx])[0]
-    best_samples = [mcmc_obj.samples[i] for i in best_samples_idx]
+    if not args.MAPonly:
+        one_best_sample_idx = np.argmax(mcmc_obj.dist)
+        best_samples_idx = np.where(mcmc_obj.dist == mcmc_obj.dist[one_best_sample_idx])[0]
+        best_samples = [mcmc_obj.samples[i] for i in best_samples_idx]
+    else:
+        best_samples = mcmc_obj.best_Ts
+        unique_trees = [samples.Tree.to_dict(with_data=True) for samples in best_samples]
+        for i,tree in enumerate(unique_trees):
+            unique_trees[i] = mcmc.expand_tree(tree)
+            unique_trees[i]["succes"] = 1 if best_samples[i].success else 0
 
     # Get depths of best performing trees
     depths = [samples.Tree.depth() for samples in best_samples]
@@ -131,20 +150,22 @@ def main():
     # Get trees with minimal depth
     #best_trees = [samples for samples in best_samples if samples.Tree.depth() == min_depth]
     # Convert to dictionaries
-    best_trees_dicts = [samples.Tree.to_dict(with_data=True) for samples in best_samples]
-    # Expand trees
-    unique_trees = []
-    unique = True
-    for i, tree in enumerate(best_trees_dicts):
+    
+    if not args.MAPonly:
+        best_trees_dicts = [samples.Tree.to_dict(with_data=True) for samples in best_samples]
+        # Expand trees
+        unique_trees = []
         unique = True
-        best_trees_dicts[i] = mcmc.expand_tree(tree)
-        best_trees_dicts[i]['success'] = 1 if best_samples[i].success else 0
-        for h in unique_trees:
-            if h == best_trees_dicts[i]:
-                unique = False
-                continue
-        if unique:
-             unique_trees.append(best_trees_dicts[i])
+        for i, tree in enumerate(best_trees_dicts):
+            unique = True
+            best_trees_dicts[i] = mcmc.expand_tree(tree)
+            best_trees_dicts[i]['success'] = 1 if best_samples[i].success else 0
+            for h in unique_trees:
+                if h == best_trees_dicts[i]:
+                    unique = False
+                    continue
+            if unique:
+                unique_trees.append(best_trees_dicts[i])
 
     # Save the best trees to output directory
     output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
@@ -153,10 +174,19 @@ def main():
     with open(output_tree_file, 'w') as f:
         json.dump(unique_trees, f, indent=4)
     # Save the statistics of the best trees
-    stats = np.zeros((1,3))
-    stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
-    stats[:,1] = min_depth
-    stats[:,2] = time.time() - start
+    
+    if not args.MAPonly:
+        stats = np.zeros((1,3))
+        stats[:,0] = np.exp(mcmc_obj.dist[one_best_sample_idx])
+        stats[:,1] = min_depth
+        stats[:,2] = time.time() - start
+    else:
+        stats = np.zeros((len(unique_trees),3))
+        stats[:,0] = np.full(len(unique_trees),np.exp(mcmc_obj.best_logp))
+        stats[:,1] = depths
+        stats[:,2] = np.full(len(unique_trees),time.time() - start)
+
+        
     np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
 
 if __name__ == "__main__":
