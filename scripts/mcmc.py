@@ -139,12 +139,15 @@ class AssemblyTree:
             node_id = random.choice(pos_nodes)
             # Merge node
             self.merge(node_id)
+            self.update_prob(node_id,max_iters=max_iters)
+
         elif operation == 'redistribute':
             if self.Tree.size() == 1:
                 # print('No update performed')
                 return False
             # Make list of leaves with more than 2 nodes
             leaves = self.Tree.leaves()
+            leaves = [leaf for leaf in leaves if len(leaf.data.nodes) > 2]
             # Choose from parents of leaves
             parents_of_leaves = [self.Tree.parent(leaf.identifier).identifier for leaf in leaves]
             pos_nodes = []
@@ -158,7 +161,15 @@ class AssemblyTree:
                 return False
             node_id = random.choice(pos_nodes)
             # Redistribute node
-            self.redistribute(node_id)
+            #self.redistribute(node_id)
+
+            #First merge
+            self.merge(node_id)
+            #Redefine old leaves to make sure the probabilities are properly updated
+            old_leaves = self.Tree.leaves()
+            #Then split
+            self.split(node_id)
+
         elif operation == 'complete_branch':
             # Make list of leaves with more than 2 nodes
             leaves = self.Tree.leaves()
@@ -176,13 +187,19 @@ class AssemblyTree:
             # Complete branch
             self.complete_branch(node_id)
         elif operation == "add_branching_point":
+            # Make list of all nodes that have more than two children
             treenodes = self.Tree.all_nodes()
             treenodes = [treenode for treenode in treenodes if len(self.Tree.children(treenode.identifier))>2]
             
+            # If no such nodes exist, return
             if len(treenodes) == 0:
                 return False
+            
+            #Choose one of these nodes to add a branching point under
             node_id = random.choice(treenodes)
             self.add_branching_point(node_id.identifier)
+
+            #Everything downstream from the new branching point needs to be updated
             node_names = [int(n.identifier) for n in self.Tree.all_nodes()]
             nodes_to_update = [self.Tree.get_node(np.max(node_names))]
             while len(nodes_to_update) > 0:
@@ -192,7 +209,8 @@ class AssemblyTree:
                     parent = self.Tree.parent(node.identifier)
                     nodes_to_update.append(parent)
 
-        if operation != "add_branching_point":
+        #New leaves are only created for split, redistribute and complete_branch
+        if operation != "add_branching_point" and operation != "merge":
             # Update probability of node assembling into a subgraph of G
             # Get children of node
 
@@ -246,28 +264,7 @@ class AssemblyTree:
             # Add child to tree
             self.Tree.create_node(data=child, parent=node_id, identifier=next_node)
     
-    def add_branching_point(self,node_id):
-        
-        if len(self.Tree.children(node_id)) == 3:
-            children_to_merge = random.sample(self.Tree.children(node_id),2)
-        else:
-            children_to_merge = random.sample(self.Tree.children(node_id),random.randint(2,len(self.Tree.children(node_id))-1))
-        graph_nodes = []
-        for c in children_to_merge:
-            node = self.Tree.get_node(c.identifier)
-            graph_node_list = node.data.nodes
-            graph_nodes += graph_node_list
-        
-        branch_node = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])      
-
-        all_nodes = self.Tree.all_nodes()
-        node_names = [int(n.identifier) for n in all_nodes]
-        next_node = np.max(node_names) + 1
-        self.Tree.create_node(data = branch_node, parent = node_id, identifier = next_node)
-        for c in children_to_merge:
-            self.Tree.move_node(c.identifier,next_node)
-
-        
+            
     def merge(self,node_id):
         """
         Merge the assembly tree at the given node ID.
@@ -280,7 +277,7 @@ class AssemblyTree:
         for child in self.Tree.children(node_id):
             self.Tree.remove_node(child.identifier)
     
-    def redistribute(self,node_id):
+    '''def redistribute(self,node_id):
         """
         Redistribute the size of children of a given node.
         
@@ -291,7 +288,7 @@ class AssemblyTree:
         # Merge children
         self.merge(node_id)
         # Split into new children
-        self.split(node_id)
+        self.split(node_id)'''
 
     def complete_branch(self,node_id):
         """
@@ -316,7 +313,38 @@ class AssemblyTree:
                 if len(self.Tree.get_node(child).data.nodes) > 2:
                     nodes_to_split.append(child)
 
-    
+    def add_branching_point(self,node_id):
+        """
+        Add a branching point below a node with at least two children
+        
+        Parameters
+        ----------
+        node_id : int -- The ID of the node to add a branching point under.
+        """
+
+        #Choose the children of node_id that will be reconnected to the branching point
+        if len(self.Tree.children(node_id)) == 3:
+            children_to_merge = random.sample(self.Tree.children(node_id),2)
+        else:
+            children_to_merge = random.sample(self.Tree.children(node_id),random.randint(2,len(self.Tree.children(node_id))-1))
+        
+        #The graph_nodes of the branching point node will be the union of all its children's nodes
+        graph_nodes = []
+        for c in children_to_merge:
+            node = self.Tree.get_node(c.identifier)
+            graph_node_list = node.data.nodes
+            graph_nodes += graph_node_list
+        
+        #Define the branch_node
+        branch_node = AssemblyNode(graph_nodes, self.X, self.O, self.capacity, subgraph = [])      
+
+        #Reconnect the chosen childrens' nodes to the branching point node.
+        all_nodes = self.Tree.all_nodes()
+        node_names = [int(n.identifier) for n in all_nodes]
+        next_node = np.max(node_names) + 1
+        self.Tree.create_node(data = branch_node, parent = node_id, identifier = next_node)
+        for c in children_to_merge:
+            self.Tree.move_node(c.identifier,next_node)
 
 
     def update_prob(self,node_id,prob_tol=10e-5,max_iters=1000):
@@ -528,6 +556,7 @@ class DesignMCMC:
         """
         if not verbose:
             for i in range(num_samples):
+                #The temperature at time step i
                 Ti = Tis[i]#T0*(1- i/num_samples)
                 # Propose a new tree
                 update_success = False
@@ -557,8 +586,10 @@ class DesignMCMC:
                 if np.random.rand() < acceptance_prob:
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
+                    #If we only care about max a posteriori (MAP) trees
                     if MAPonly:
                         self.update_best()
+                    #If we want full distribution
                     if not MAPonly:
                         self.samples.append(copy.deepcopy(self.cur_T))
                         self.log_p.append(posterior)
@@ -568,8 +599,9 @@ class DesignMCMC:
                     if not MAPonly:
                         self.samples.append(copy.deepcopy(self.cur_T))
                         self.log_p.append(copy.deepcopy(self.cur_prob))
+                    #The current tree is already potentially part of the current best trees so we do not need to enter update_best()
 
-        else:
+        else: #TODO I DIDNT UPDATE THIS PART
             for i in tqdm(range(num_samples)):
                 # Propose a new tree
                 update_success = False
@@ -608,19 +640,18 @@ class DesignMCMC:
             self.update_dist()
     
     def update_best(self):
+        """
+        Update the set of trees that give the best posterior
+        """
+        #If the new probability is better than the current best then reinitialize the best tree list
         if self.cur_prob > self.best_logp:
             self.best_logp = self.cur_prob
-            #tree = self.cur_T.Tree.to_dict(with_data=True)
-            #expand_tree(tree)
             self.best_Ts = [self.cur_T]
 
+        #If the new probability is equal to the current best then check if the current tree is already in the list and if not add it
         elif self.cur_prob == self.best_logp:
-            #tree = self.cur_T.Tree.to_dict(with_data=True)
-            #expand_tree(tree)
             for i, t in enumerate(self.best_Ts):
                 new = True
-                #tree = t.Tree.to_dict(with_data=True)
-                #expand_tree(tree)
                 if t == self.cur_T:
                     new = False
                     break
