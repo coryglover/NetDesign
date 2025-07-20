@@ -139,7 +139,6 @@ class AssemblyTree:
             node_id = random.choice(pos_nodes)
             # Merge node
             self.merge(node_id)
-            self.update_prob(node_id,max_iters=max_iters)
 
         elif operation == 'redistribute':
             if self.Tree.size() == 1:
@@ -199,7 +198,7 @@ class AssemblyTree:
             node_id = random.choice(treenodes)
             self.add_branching_point(node_id.identifier)
 
-            #Everything downstream from the new branching point needs to be updated
+            #Everything upstream from the new branching point needs to be updated
             node_names = [int(n.identifier) for n in self.Tree.all_nodes()]
             nodes_to_update = [self.Tree.get_node(np.max(node_names))]
             while len(nodes_to_update) > 0:
@@ -209,8 +208,8 @@ class AssemblyTree:
                     parent = self.Tree.parent(node.identifier)
                     nodes_to_update.append(parent)
 
-        #New leaves are only created for split, redistribute and complete_branch
-        if operation != "add_branching_point" and operation != "merge":
+        #New leaves are not created when you add branching point
+        if operation != "add_branching_point":
             # Update probability of node assembling into a subgraph of G
             # Get children of node
 
