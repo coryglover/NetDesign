@@ -15,6 +15,7 @@ import json
 from tqdm import tqdm
 from scipy.optimize import milp
 from scipy.optimize import LinearConstraint
+import random
 
 def cut_graph(g,pairs):
     cutset = set()
@@ -211,7 +212,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,T,fixed_edges=None):
+def rewire(g,X,O,capacity,T,fixed_edges=None):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
@@ -224,6 +225,160 @@ def rewire(g,X,O,T,fixed_edges=None):
     Returns:
         nx.Graph: Rewired graph.
     """
+    n_edges = g.number_of_edges()
+    
+    nodes = list(g.nodes())
+
+    v_to_ix = {v:i for i,v in enumerate(g.nodes())}
+    ix_to_v = {i:v for i,v in enumerate(g.nodes())}
+    #An NxN binary matrix M where M_ij = 1 iff the O matrix allows an edge between nodes i and j
+    node_capacity_per_type = X[nodes] @ O 
+    node_capacity = X[nodes] @ capacity[:,np.newaxis]
+
+    g = g.remove_edges_from(g.edges())
+
+    for e in fixed_edges:
+        g.add_edge(*e)
+        node_capacity[v_to_ix[e[0]]]-=1
+        node_capacity[v_to_ix[e[1]]]-=1
+        node_capacity_per_type[v_to_ix[e[0]],X[e[1]].argmax()]-=1
+        node_capacity_per_type[v_to_ix[e[1]],X[e[0]].argmax()]-=1
+
+    
+
+
+
+
+    
+
+    '''
+    A = nx.adjacency_matrix(g).todense()
+    nodes = list(g.nodes())
+
+    v_to_ix = {v:i for i,v in enumerate(g.nodes())}
+    ix_to_v = {i:v for i,v in enumerate(g.nodes())}
+    #An NxN binary matrix M where M_ij = 1 iff the O matrix allows an edge between nodes i and j
+    pos_edgesO = X[nodes] @ O @ X[nodes].T
+    
+    AXX = A@X[nodes]@X[nodes].T
+    
+    #Set entries to zero if they correspond to self loops or existing edges
+    pos_edgesO -= AXX
+
+    pos_edgesO = (pos_edgesO > 0).astype(int)
+    pos_edgesO -= np.diag(np.diag(pos_edgesO))
+    
+    #An Nx1 vector v with the unused capacity of the nodes
+    free_sitesC = X[nodes] @ capacity[:,np.newaxis] - np.array([g.degree(v) for v in g.nodes()],dtype=int)[:,np.newaxis]
+    #print(freesites.shape,(X[nodes] @ capacity),np.array([g.degree(v) for v in g.nodes()],dtype=int),freesites)
+    
+    free_sitesO = X[nodes] @ O - A @ X[nodes]
+
+    #An Nx1 vector v where v_i = 0 iff node i is at full capacity and all its incident edges are fixed
+    full_nodes_with_only_fixed_edges = np.array([0 if free_sitesC[v_to_ix[v]] == 0 and np.all([1 if e in fixed_edges else 0 for e in g.edges(v)]) else 1 for v in g.nodes()])[:, np.newaxis]
+
+    #An NxN binary matrix M where M_ij = 1 iff at least one of the two nodes i or j has free sites. 
+    
+    pos_edgesC = np.full((g.number_of_nodes(),g.number_of_nodes()),1) - (free_sitesC == 0).astype(int) @ ((free_sitesC == 0).astype(int)).T
+    pos_edgesC -= np.diag(np.diag(pos_edgesC))
+    
+    #Set those entries of pos_edgesC to zero where at least one of the two nodes is full AND has only fixed edges incident to it
+    pos_edgesC *= full_nodes_with_only_fixed_edges @ full_nodes_with_only_fixed_edges.T
+
+    pos_edgesO = np.full((g.number_of_nodes(),g.number_of_nodes()),1) - (free_sitesO == 0).astype(int) @ (free_sitesO == 0).astype(int).T
+    pos_edgesO -= np.diag(np.diag(pos_edgesO))
+    
+    #If all edges in the graph are fixed then dont rewire
+    if np.all([1 if e in fixed_edges else 0 for e in g.edges()]):
+        return g
+    
+    
+    for i in range(T):
+        #Choose an edge to add from the possible ones, i.e., those edges ij where pos_edgesC_ij=pos_edgesO_ij==1
+        possible_edges = np.nonzero(np.logical_and(pos_edgesC,pos_edgesO))
+        rows, cols = possible_edges
+
+        indices = [(int(r), int(c)) for r, c in zip(rows, cols)]
+
+        #If no such edges exist return g
+        if not indices:
+            return g
+        else:
+            e2 = random.choice(indices)
+
+        edgelist = list(g.edges)
+        print(e2)
+        print(ix_to_v[e2[0]],ix_to_v[e2[1]])
+        
+        #If both edge points of the new edge have free sites choose a non fixed edge from the set of all edges in gto remove
+        if freesites[e2[0]] > 0 and freesites[e2[1]] > 0:
+            succes = False
+            while not succes:
+                e1 = random.choice(edgelist)
+                if e1 not in fixed_edges:
+                    succes = True
+
+        #If the first end point of the new edge has no free sites choose a non fixed edge from the set of edges incident to that end point to remove
+        elif freesites[e2[0]] == 0 and freesites[e2[1]] > 0:
+            succes = False
+            edgesv = list(g.edges(ix_to_v[e2[0]]))
+            
+            while not succes:
+                e1 = random.choice(edgesv)
+                if e1 not in fixed_edges:
+                    succes = True
+
+        #If the second end point of the new edge has no free sites choose a non fixed edge from the set of edges incident to that end point to remove
+        elif freesites[e2[0]] > 0 and freesites[e2[1]] == 0:
+            succes = False
+            edgesv = list(g.edges(ix_to_v[e2[1]]))
+            
+            while not succes:
+                e1 = random.choice(edgesv)
+                if e1 not in fixed_edges:
+                    succes = True
+        
+        else:
+            print("error")
+
+        #Remove the old edge and add the new
+        g.remove_edge(*e1)
+        g.add_edge(ix_to_v[e2[0]],ix_to_v[e2[1]])
+
+
+        ix10 = v_to_ix[e1[0]]
+        ix11 = v_to_ix[e1[1]]
+
+        #Update the freesites vector
+        freesites[e2[0]] += 1
+        freesites[e2[1]] += 1
+        freesites[ix10] -= 1
+        freesites[ix11] -= 1
+
+        #Update the pos_edgesC matrix
+        if freesites[e2[0]] > 0  or freesites[e2[1]] > 0:
+            pos_edgesC[e2[0],e2[1]] = 1
+            pos_edgesC[e2[1],e2[0]] = 1
+        else:
+            pos_edgesC[e2[0],e2[1]] = 0
+            pos_edgesC[e2[1],e2[0]] = 0
+
+        if freesites[ix10] > 0 or freesites[ix11] > 0:
+            pos_edgesC[ix10,ix11] = 1
+            pos_edgesC[ix11,ix10] = 1
+        else:
+            pos_edgesC[ix10,ix11] = 0
+            pos_edgesC[ix11,ix10] = 0
+
+        #Update the pos_edgesO matrix
+        pos_edgesO[ix10,ix11] +=1
+        pos_edgesO[ix11,ix10] +=1
+        pos_edgesO[e2[0],e2[1]] -=1
+        pos_edgesO[e2[1],e2[0]] -=1
+
+    
+    return g
+    
     # Get adjacency matrix
     A = nx.adjacency_matrix(g).todense()
     nodes = list(g.nodes())
@@ -286,6 +441,7 @@ def rewire(g,X,O,T,fixed_edges=None):
         if not success:
             pos_neighbors[nodes.index(u),u_neighbor_label] -= 1
     # Return rewired graph
+    '''
     return g
 
 def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
@@ -324,7 +480,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
                     cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
@@ -347,7 +503,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
                     cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
@@ -830,5 +986,5 @@ if __name__ == '__main__':
     new_g = microcanonical_ensemble(X,O,capacity)
     draw_network(new_g,X,with_labels=True)
     for i in range(10):
-        new_g = rewire(new_g,X,O,T=1000)
+        new_g = rewire(new_g,X,O,capacity,T=1000)
         draw_network(new_g,X,with_labels=True)
