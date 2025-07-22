@@ -62,11 +62,10 @@ def main():
         output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
         with open(output_tree_file, 'w') as f:
             json.dump(best_trees_dicts, f, indent=4)
-        stats = np.zeros((1,4))
+        stats = np.zeros((1,3))
         stats[:,0] = 1.0
         stats[:,1] = initial_tree.Tree.depth()
         stats[:,2] = time.time() - start
-        stats[:,3] = 1
         np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
         return
     # Run MCMC to find best assembly tree
@@ -142,7 +141,7 @@ def main():
         unique_trees = [samples.Tree.to_dict(with_data=True) for samples in best_samples]
         for i,tree in enumerate(unique_trees):
             unique_trees[i] = mcmc.expand_tree(tree)
-            unique_trees[i]["succes"] = 1 if best_samples[i].success else 0
+            unique_trees[i]["success"] = 1 if best_samples[i].success else 0
 
     # Get depths of best performing trees
     depths = [samples.Tree.depth() for samples in best_samples]

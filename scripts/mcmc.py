@@ -585,12 +585,13 @@ class DesignMCMC:
                 print("ac",acceptance_prob)
 
                 if np.random.rand() < acceptance_prob:
-                    print("here")
+                    
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     #If we only care about max a posteriori (MAP) trees
                     if MAPonly:
                         self.update_best()
+                        print(len(self.best_Ts))
                     #If we want full distribution
                     if not MAPonly:
                         self.samples.append(copy.deepcopy(self.cur_T))
@@ -647,8 +648,8 @@ class DesignMCMC:
         """
         #If the new probability is better than the current best then reinitialize the best tree list
         if self.cur_prob > self.best_logp:
-            self.best_logp = self.cur_prob
-            self.best_Ts = [self.cur_T]
+            self.best_logp = copy.deepcopy(self.cur_prob)
+            self.best_Ts = [copy.deepcopy(self.cur_T)]
 
         #If the new probability is equal to the current best then check if the current tree is already in the list and if not add it
         elif self.cur_prob == self.best_logp:
@@ -658,7 +659,7 @@ class DesignMCMC:
                     new = False
                     break
             if new:
-                self.best_Ts.append(self.cur_T)
+                self.best_Ts.append(copy.deepcopy(self.cur_T))
     
     def update_dist(self):
         """
