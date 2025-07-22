@@ -11,7 +11,7 @@
 #SBATCH --array=1-1000%10
 
 # Read in parameters file
-PARAMS=$(sed -n "${SLURM_ARRAY_TASK_ID}p" /projects/ccnr/glover.co/net_design/NetDesign/params/robots/mcmc_params_1.txt)
+PARAMS=$(sed -n "${SLURM_ARRAY_TASK_ID}p" /projects/ccnr/glover.co/net_design/NetDesign/params/robots/mcmc_params.txt)
 
 #echo "${PARAMS}"
 # Run mcmc script with parameters

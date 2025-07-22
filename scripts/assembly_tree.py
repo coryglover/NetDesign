@@ -15,6 +15,8 @@ import json
 from tqdm import tqdm
 from scipy.optimize import milp
 from scipy.optimize import LinearConstraint
+import random
+import time
 
 def cut_graph(g,pairs):
     cutset = set()
@@ -211,7 +213,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,T,fixed_edges=None):
+def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=True):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
@@ -224,6 +226,633 @@ def rewire(g,X,O,T,fixed_edges=None):
     Returns:
         nx.Graph: Rewired graph.
     """
+    if sample:
+        # Get number of edges
+        E = g.number_of_edges()
+        new_g = nx.Graph()
+        new_g.add_nodes_from(g.nodes())
+        if fixed_edges is not None:
+            new_g.add_edges_from(fixed_edges)
+        # Order all possible edges
+        pos_edges = list(combinations(g.nodes(), 2))
+        # Random shuffle edges
+        idx = np.arange(len(pos_edges))
+        np.random.shuffle(idx)
+        i = 0
+        #print("----")
+        #O = O.astype(int)
+        #capacity = capacity.astype(int)
+        #X = X.astype(int)
+        while new_g.number_of_edges() < E:
+            # Try and add edge
+            e1 = pos_edges[idx[i]]
+            v1, v2 = e1
+            #print(v1,v2)
+            t1, t2 = X[v1].argmax(), X[v2].argmax()
+            if new_g.has_edge(v1,v2) or new_g.degree(v1) == capacity[t1] or new_g.degree(v2) == capacity[t2]:
+                i += 1
+                #continue
+            # Check whether edge is compatible
+            #elif new_g.degree(v1) == capacity[t1] or new_g.degree(v2) == capacity[t2]:
+            #    i += 1
+                #continue
+            #
+            # Get number of connections with each type
+            else:
+                v1_neighbors = list(new_g.neighbors(v1))
+                v2_neighbors = list(new_g.neighbors(v2))
+                v1_types = X[v1_neighbors].sum(axis=0)
+                v2_types = X[v2_neighbors].sum(axis=0)
+                #print(v1_types,v2_types)
+                #print(O[t1,:],O[t2,:])
+                #print(O[t1,t2],v1_types[t2],O[t2,t1],v2_types[t1])
+                if O[t1, t2] > v1_types[t2] and O[t2, t1] > v2_types[t1]:
+                    new_g.add_edge(v1, v2)
+                    #print("added")
+                    #print(v1,v2)
+                i += 1
+            #print(v1,v2)
+            #print(i)
+            if i >= len(idx) and new_g.number_of_edges() < E:
+                #print("broke")
+                i = 0
+                new_g.remove_edges_from(list(new_g.edges()))
+                if fixed_edges is not None:
+                    # Re-add fixed edges
+                    new_g.add_edges_from(fixed_edges)
+                np.random.shuffle(idx)
+        return new_g
+            
+
+    if not sample:
+        nodes = list(g.nodes())
+        node_capacity_per_type = X @ O
+        node_capacity = X @ capacity[:,np.newaxis]
+        edges = list(g.edges())
+        # Remove fixed edges from edge list
+        if fixed_edges is not None:
+            available_edges = [e for e in edges if e not in fixed_edges and e[::-1] not in fixed_edges]
+        else:
+            available_edges = edges.copy()
+            fixed_edges = []
+        
+        # Burn in period
+        for _ in range(burn_in):
+            # Randomly select edge to rewire
+            edges = list(g.edges())
+            if fixed_edges is not None:
+                available_edges = [e for e in edges if e not in fixed_edges and e[::-1] not in fixed_edges]
+            else:
+                available_edges = edges.copy()
+                fixed_edges = []
+            if len(available_edges) == 0:
+                break
+            e1 = random.choice(available_edges)
+            e1 = np.array(e1)
+            # Randomly order nodes of edge
+            np.random.shuffle(e1)
+            e1 = tuple(e1)
+            v1, v2 = e1
+            # Get types of nodes
+            t1, t2 = X[v1].argmax(), X[v2].argmax()
+            # Randomly choose two nodes, without replacement
+            v3, v4 = np.random.choice(nodes, 2, replace=False)
+            # Check whether edge was chosen
+            if (v3,v4) == e1 or (v4,v3) == e1 or (v3,v4) in fixed_edges or (v4,v3) in fixed_edges:
+                continue
+            # Get types of new nodes
+            t3, t4 = X[v3].argmax(), X[v4].argmax()
+            # Check whether nodes are connected
+            if g.has_edge(v3,v4) and v3 != v1 and v3 != v2 and v4 != v1 and v4 != v2:
+                if g.has_edge(v1,v3) or g.has_edge(v2,v4):
+                    continue
+                # Check whether swap is compatible
+                if node_capacity_per_type[v1, t3] > 0 and node_capacity_per_type[v2, t4] > 0 and node_capacity_per_type[v3, t1] > 0 and node_capacity_per_type[v4, t2] > 0:
+                    # Remove old edge and add new edge
+                    g.remove_edge(v1, v2)
+                    g.remove_edge(v3, v4)
+                    g.add_edge(v1, v3)
+                    g.add_edge(v2, v4)
+                    
+                    # Update available edges
+                    # if (v1,v2) in available_edges:
+                    #     available_edges.remove((v1,v2))
+                    # else:
+                    #     available_edges.remove((v2,v1))
+                    # if (v3,v4) in available_edges:
+                    #     available_edges.remove((v3,v4))
+                    # else:
+                    #     available_edges.remove((v4,v3))
+                    # available_edges.append((v1, v3))
+                    # available_edges.append((v2,v4))
+            elif not g.has_edge(v3,v4):
+                # Check whether v3 and v4 are at capacity
+                if g.degree(v3) == node_capacity[v3] and g.degree(v4) == node_capacity[v4]:
+                    continue
+                if v3 == v1:
+                    if g.has_edge(v2, v4):
+                        continue
+                    # Check whether v4 can connect to v2 
+                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t2] == 0:
+                        continue
+                    else:
+                        # Check whether v4 is of type t1
+                        if t4 == t1:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v2, v4)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v2, v4))
+                        else:
+                            # Check whether v2 can connect to v4
+                            if node_capacity_per_type[v2,t4] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v2, v4)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v2, v4))
+                elif v3 == v2:
+                    if g.has_edge(v1, v4):
+                        continue
+                    # Check whether v4 can connect to v1 
+                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t1] == 0:
+                        continue
+                    else:
+                        # Check whether v4 is of type t2
+                        if t4 == t2:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v1, v4)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v1, v4))
+                        else:
+                            # Check whether v1 can connect to v4
+                            if node_capacity_per_type[v1,t4] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v1, v4)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                        
+                                # available_edges.append((v1, v4))
+                    
+                elif v4 == v1:
+                    if g.has_edge(v2, v3):
+                        continue
+                    # Check whether v3 can connect to v2 
+                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t2] == 0:
+                        continue
+                    else:
+                        # Check whether v3 is of type t1
+                        if t3 == t1:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v2, v3)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v2, v3))
+                        else:
+                            # Check whether v2 can connect to v3
+                            if node_capacity_per_type[v2,t3] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v2, v3)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v2, v3))
+                    
+                elif v4 == v2:
+                    if g.has_edge(v1, v3):
+                        continue
+                    # Check whether v3 can connect to v1 
+                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t1] == 0:
+                        continue
+                    else:
+                        # Check whether v3 is of type t2
+                        if t3 == t2:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v1, v3)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v1, v3))
+                        else:
+                            # Check whether v1 can connect to v3
+                            if node_capacity_per_type[v1,t3] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v1, v3)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v1, v3))
+                    
+                elif v1 != v3 and v1 != v4 and v2 != v3 and v2 != v4:
+                    # If none of the nodes are the same, try to make one new connection
+                    # Check which nodes are compatible
+                    pos_edges = []
+                    for n1 in [v1,v2]:
+                        for n2 in [v3,v4]:
+                            if g.degree(n2) == node_capacity[n2]:
+                                continue
+                            else:
+                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0:
+                                    if not g.has_edge(n1, n2):
+                                        # Only add edge if it is not already present
+                                        pos_edges.append((n1,n2))
+                    # Randomly select new edge
+                    if len(pos_edges) > 0:
+                        new_edge = random.choice(pos_edges)
+                        g.remove_edge(v1, v2)
+                        g.add_edge(*new_edge)
+                        # Update available edges
+                        # if (v1,v2) in available_edges:
+                        #     available_edges.remove((v1, v2))
+                        # else:
+                        #     available_edges.remove((v2, v1))
+                        # available_edges.append(new_edge)
+        # After burn in perform for T iterations
+        for _ in range(T):
+            # Randomly select edge to rewire
+            edges = list(g.edges())
+            if fixed_edges is not None:
+                available_edges = [e for e in edges if e not in fixed_edges and e[::-1] not in fixed_edges]
+            else:
+                available_edges = edges.copy()
+                fixed_edges = []
+            if len(available_edges) == 0:
+                break
+            e1 = random.choice(available_edges)
+            e1 = np.array(e1)
+            # Randomly order nodes of edge
+            np.random.shuffle(e1)
+            e1 = tuple(e1)
+            v1, v2 = e1
+            # Get types of nodes
+            t1, t2 = X[v1].argmax(), X[v2].argmax()
+            # Randomly choose two nodes, without replacement
+            v3, v4 = np.random.choice(nodes, 2, replace=False)
+            # Check whether edge was chosen
+            if (v3,v4) == e1 or (v4,v3) == e1 or (v3,v4) in fixed_edges or (v4,v3) in fixed_edges:
+                continue
+            # Get types of new nodes
+            t3, t4 = X[v3].argmax(), X[v4].argmax()
+            # Check whether nodes are connected
+            if g.has_edge(v3,v4) and v3 != v1 and v3 != v2 and v4 != v1 and v4 != v2:
+                if g.has_edge(v1,v3) or g.has_edge(v2,v4):
+                    continue
+                # Check whether swap is compatible
+                if node_capacity_per_type[v1, t3] > 0 and node_capacity_per_type[v2, t4] > 0 and node_capacity_per_type[v3, t1] > 0 and node_capacity_per_type[v4, t2] > 0:
+                    # Remove old edge and add new edge
+                    g.remove_edge(v1, v2)
+                    g.remove_edge(v3, v4)
+                    g.add_edge(v1, v3)
+                    g.add_edge(v2, v4)
+                    
+                    # Update available edges
+                    # if (v1,v2) in available_edges:
+                    #     available_edges.remove((v1,v2))
+                    # else:
+                    #     available_edges.remove((v2,v1))
+                    # if (v3,v4) in available_edges:
+                    #     available_edges.remove((v3,v4))
+                    # else:
+                    #     available_edges.remove((v4,v3))
+                    # available_edges.append((v1, v3))
+                    # available_edges.append((v2,v4))
+            elif not g.has_edge(v3,v4):
+                # Check whether v3 and v4 are at capacity
+                if g.degree(v3) == node_capacity[v3] and g.degree(v4) == node_capacity[v4]:
+                    continue
+                if v3 == v1:
+                    if g.has_edge(v2, v4):
+                        continue
+                    # Check whether v4 can connect to v2 
+                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t2] == 0:
+                        continue
+                    else:
+                        # Check whether v4 is of type t1
+                        if t4 == t1:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v2, v4)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v2, v4))
+                        else:
+                            # Check whether v2 can connect to v4
+                            if node_capacity_per_type[v2,t4] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v2, v4)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v2, v4))
+                elif v3 == v2:
+                    if g.has_edge(v1, v4):
+                        continue
+                    # Check whether v4 can connect to v1 
+                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t1] == 0:
+                        continue
+                    else:
+                        # Check whether v4 is of type t2
+                        if t4 == t2:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v1, v4)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v1, v4))
+                        else:
+                            # Check whether v1 can connect to v4
+                            if node_capacity_per_type[v1,t4] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v1, v4)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                        
+                                # available_edges.append((v1, v4))
+                    
+                elif v4 == v1:
+                    if g.has_edge(v2, v3):
+                        continue
+                    # Check whether v3 can connect to v2 
+                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t2] == 0:
+                        continue
+                    else:
+                        # Check whether v3 is of type t1
+                        if t3 == t1:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v2, v3)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v2, v3))
+                        else:
+                            # Check whether v2 can connect to v3
+                            if node_capacity_per_type[v2,t3] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v2, v3)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v2, v3))
+                    
+                elif v4 == v2:
+                    if g.has_edge(v1, v3):
+                        continue
+                    # Check whether v3 can connect to v1 
+                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t1] == 0:
+                        continue
+                    else:
+                        # Check whether v3 is of type t2
+                        if t3 == t2:
+                            g.remove_edge(v1, v2)
+                            g.add_edge(v1, v3)
+                            # Update available edges
+                            # if (v1,v2) in available_edges:
+                            #     available_edges.remove((v1, v2))
+                            # else:
+                            #     available_edges.remove((v2, v1))
+                            # available_edges.append((v1, v3))
+                        else:
+                            # Check whether v1 can connect to v3
+                            if node_capacity_per_type[v1,t3] > 0:
+                                g.remove_edge(v1, v2)
+                                g.add_edge(v1, v3)
+                                # Update available edges
+                                # if (v1,v2) in available_edges:
+                                #     available_edges.remove((v1, v2))
+                                # else:
+                                #     available_edges.remove((v2, v1))
+                                # available_edges.append((v1, v3))
+                    
+                elif v1 != v3 and v1 != v4 and v2 != v3 and v2 != v4:
+                    # If none of the nodes are the same, try to make one new connection
+                    # Check which nodes are compatible
+                    pos_edges = []
+                    for n1 in [v1,v2]:
+                        for n2 in [v3,v4]:
+                            if g.degree(n2) == node_capacity[n2]:
+                                continue
+                            else:
+                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0:
+                                    if not g.has_edge(n1, n2):
+                                        # Only add edge if it is not already present
+                                        pos_edges.append((n1,n2))
+                    # Randomly select new edge
+                    if len(pos_edges) > 0:
+                        new_edge = random.choice(pos_edges)
+                        g.remove_edge(v1, v2)
+                        g.add_edge(*new_edge)
+                        # Update available edges
+                        # if (v1,v2) in available_edges:
+                        #     available_edges.remove((v1, v2))
+                        # else:
+                        #     available_edges.remove((v2, v1))
+                        # available_edges.append(new_edge)
+        return g
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # n_edges = g.number_of_edges()
+    
+    # nodes = list(g.nodes())
+
+
+    # v_to_ix = {v:i for i,v in enumerate(g.nodes())}
+    # ix_to_v = {i:v for i,v in enumerate(g.nodes())}
+    # #An NxN binary matrix M where M_ij = 1 iff the O matrix allows an edge between nodes i and j
+    # node_capacity_per_type = X[nodes] @ O 
+    # node_capacity = X[nodes] @ capacity[:,np.newaxis]
+
+    # g = g.remove_edges_from(g.edges())
+
+    # for e in fixed_edges:
+    #     g.add_edge(*e)
+    #     node_capacity[v_to_ix[e[0]]]-=1
+    #     node_capacity[v_to_ix[e[1]]]-=1
+    #     node_capacity_per_type[v_to_ix[e[0]],X[e[1]].argmax()]-=1
+    #     node_capacity_per_type[v_to_ix[e[1]],X[e[0]].argmax()]-=1
+
+    
+
+
+
+
+    
+
+    '''
+    A = nx.adjacency_matrix(g).todense()
+    nodes = list(g.nodes())
+
+    v_to_ix = {v:i for i,v in enumerate(g.nodes())}
+    ix_to_v = {i:v for i,v in enumerate(g.nodes())}
+    #An NxN binary matrix M where M_ij = 1 iff the O matrix allows an edge between nodes i and j
+    pos_edgesO = X[nodes] @ O @ X[nodes].T
+    
+    AXX = A@X[nodes]@X[nodes].T
+    
+    #Set entries to zero if they correspond to self loops or existing edges
+    pos_edgesO -= AXX
+
+    pos_edgesO = (pos_edgesO > 0).astype(int)
+    pos_edgesO -= np.diag(np.diag(pos_edgesO))
+    
+    #An Nx1 vector v with the unused capacity of the nodes
+    free_sitesC = X[nodes] @ capacity[:,np.newaxis] - np.array([g.degree(v) for v in g.nodes()],dtype=int)[:,np.newaxis]
+    #print(freesites.shape,(X[nodes] @ capacity),np.array([g.degree(v) for v in g.nodes()],dtype=int),freesites)
+    
+    free_sitesO = X[nodes] @ O - A @ X[nodes]
+
+    #An Nx1 vector v where v_i = 0 iff node i is at full capacity and all its incident edges are fixed
+    full_nodes_with_only_fixed_edges = np.array([0 if free_sitesC[v_to_ix[v]] == 0 and np.all([1 if e in fixed_edges else 0 for e in g.edges(v)]) else 1 for v in g.nodes()])[:, np.newaxis]
+
+    #An NxN binary matrix M where M_ij = 1 iff at least one of the two nodes i or j has free sites. 
+    
+    pos_edgesC = np.full((g.number_of_nodes(),g.number_of_nodes()),1) - (free_sitesC == 0).astype(int) @ ((free_sitesC == 0).astype(int)).T
+    pos_edgesC -= np.diag(np.diag(pos_edgesC))
+    
+    #Set those entries of pos_edgesC to zero where at least one of the two nodes is full AND has only fixed edges incident to it
+    pos_edgesC *= full_nodes_with_only_fixed_edges @ full_nodes_with_only_fixed_edges.T
+
+    pos_edgesO = np.full((g.number_of_nodes(),g.number_of_nodes()),1) - (free_sitesO == 0).astype(int) @ (free_sitesO == 0).astype(int).T
+    pos_edgesO -= np.diag(np.diag(pos_edgesO))
+    
+    #If all edges in the graph are fixed then dont rewire
+    if np.all([1 if e in fixed_edges else 0 for e in g.edges()]):
+        return g
+    
+    
+    for i in range(T):
+        #Choose an edge to add from the possible ones, i.e., those edges ij where pos_edgesC_ij=pos_edgesO_ij==1
+        possible_edges = np.nonzero(np.logical_and(pos_edgesC,pos_edgesO))
+        rows, cols = possible_edges
+
+        indices = [(int(r), int(c)) for r, c in zip(rows, cols)]
+
+        #If no such edges exist return g
+        if not indices:
+            return g
+        else:
+            e2 = random.choice(indices)
+
+        edgelist = list(g.edges)
+        print(e2)
+        print(ix_to_v[e2[0]],ix_to_v[e2[1]])
+        
+        #If both edge points of the new edge have free sites choose a non fixed edge from the set of all edges in gto remove
+        if freesites[e2[0]] > 0 and freesites[e2[1]] > 0:
+            succes = False
+            while not succes:
+                e1 = random.choice(edgelist)
+                if e1 not in fixed_edges:
+                    succes = True
+
+        #If the first end point of the new edge has no free sites choose a non fixed edge from the set of edges incident to that end point to remove
+        elif freesites[e2[0]] == 0 and freesites[e2[1]] > 0:
+            succes = False
+            edgesv = list(g.edges(ix_to_v[e2[0]]))
+            
+            while not succes:
+                e1 = random.choice(edgesv)
+                if e1 not in fixed_edges:
+                    succes = True
+
+        #If the second end point of the new edge has no free sites choose a non fixed edge from the set of edges incident to that end point to remove
+        elif freesites[e2[0]] > 0 and freesites[e2[1]] == 0:
+            succes = False
+            edgesv = list(g.edges(ix_to_v[e2[1]]))
+            
+            while not succes:
+                e1 = random.choice(edgesv)
+                if e1 not in fixed_edges:
+                    succes = True
+        
+        else:
+            print("error")
+
+        #Remove the old edge and add the new
+        g.remove_edge(*e1)
+        g.add_edge(ix_to_v[e2[0]],ix_to_v[e2[1]])
+
+
+        ix10 = v_to_ix[e1[0]]
+        ix11 = v_to_ix[e1[1]]
+
+        #Update the freesites vector
+        freesites[e2[0]] += 1
+        freesites[e2[1]] += 1
+        freesites[ix10] -= 1
+        freesites[ix11] -= 1
+
+        #Update the pos_edgesC matrix
+        if freesites[e2[0]] > 0  or freesites[e2[1]] > 0:
+            pos_edgesC[e2[0],e2[1]] = 1
+            pos_edgesC[e2[1],e2[0]] = 1
+        else:
+            pos_edgesC[e2[0],e2[1]] = 0
+            pos_edgesC[e2[1],e2[0]] = 0
+
+        if freesites[ix10] > 0 or freesites[ix11] > 0:
+            pos_edgesC[ix10,ix11] = 1
+            pos_edgesC[ix11,ix10] = 1
+        else:
+            pos_edgesC[ix10,ix11] = 0
+            pos_edgesC[ix11,ix10] = 0
+
+        #Update the pos_edgesO matrix
+        pos_edgesO[ix10,ix11] +=1
+        pos_edgesO[ix11,ix10] +=1
+        pos_edgesO[e2[0],e2[1]] -=1
+        pos_edgesO[e2[1],e2[0]] -=1
+
+    
+    return g
+    
     # Get adjacency matrix
     A = nx.adjacency_matrix(g).todense()
     nodes = list(g.nodes())
@@ -286,7 +915,8 @@ def rewire(g,X,O,T,fixed_edges=None):
         if not success:
             pos_neighbors[nodes.index(u),u_neighbor_label] -= 1
     # Return rewired graph
-    return g
+    '''
+    # return g
 
 def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
     """
@@ -324,7 +954,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
                     cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
@@ -347,7 +977,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
                     cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
@@ -821,14 +1451,30 @@ def measure_stability(X, O, ret_g=False, initial_graph=None, capacity=None,multi
     return cur_graphs
     
 if __name__ == '__main__':
-    X = np.vstack([np.eye(3) for i in range(2)])
-    O = np.array([[0,1,1],[1,0,1],[1,1,2]])
+    # X = np.vstack([np.eye(3) for i in range(2)])
+    # O = np.array([[0,1,1],[1,0,1],[1,1,2]])
+    # capacity = O.sum(axis=1,dtype=int)
+    # target = nx.Graph()
+    # target.add_nodes_from(np.arange(6))
+    # target.add_edges_from([[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[2,5]])
+    O = np.array([[0,1,1],[1,0,1],[1,1,0]],dtype=int)
+    X = np.array([[1,0,0],[0,1,0],[0,0,1],[1,0,0]],dtype=int)
     capacity = O.sum(axis=1,dtype=int)
-    target = nx.Graph()
-    target.add_nodes_from(np.arange(6))
-    target.add_edges_from([[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[2,5]])
-    new_g = microcanonical_ensemble(X,O,capacity)
-    draw_network(new_g,X,with_labels=True)
+    g = nx.Graph()
+    g.add_nodes_from(np.arange(4))
+    g.add_edges_from([(0,1),(1,2),(2,0)])
+    print(g.edges())
+    # new_g = microcanonical_ensemble(X,O,capacity)
+    # draw_network(new_g,X,with_labels=True)
+    # for i in range(10):
+    start = time.time()
     for i in range(10):
-        new_g = rewire(new_g,X,O,T=1000)
-        draw_network(new_g,X,with_labels=True)
+        new_g = rewire(g,X,O,capacity,T=1000,sample=True)
+        print(new_g.edges())
+    print('sample',time.time() - start)
+    start = time.time()
+    for i in range(10):
+        new_g = rewire(g,X,O,capacity,T=1000,sample=False)
+        print(new_g.edges())
+    print('rewire',time.time() - start)
+    draw_network(new_g,X,with_labels=True)
