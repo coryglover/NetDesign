@@ -271,8 +271,8 @@ def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=False):
 
     if not sample:
         nodes = list(g.nodes())
-        node_capacity_per_type = X[nodes] @ O
-        node_capacity = X[nodes] @ capacity[:, np.newaxis]
+        node_capacity_per_type = X @ O
+        node_capacity = X @ capacity[:,np.newaxis]
         edges = list(g.edges())
         # Remove fixed edges from edge list
         if fixed_edges is not None:
