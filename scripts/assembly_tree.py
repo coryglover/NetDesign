@@ -213,7 +213,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=False):
+def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=True):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
@@ -239,34 +239,49 @@ def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=False):
         idx = np.arange(len(pos_edges))
         np.random.shuffle(idx)
         i = 0
+        #print("----")
+        #O = O.astype(int)
+        #capacity = capacity.astype(int)
+        #X = X.astype(int)
         while new_g.number_of_edges() < E:
             # Try and add edge
             e1 = pos_edges[idx[i]]
             v1, v2 = e1
+            #print(v1,v2)
             t1, t2 = X[v1].argmax(), X[v2].argmax()
-            if new_g.has_edge(v1,v2):
+            if new_g.has_edge(v1,v2) or new_g.degree(v1) == capacity[t1] or new_g.degree(v2) == capacity[t2]:
                 i += 1
-                continue
+                #continue
             # Check whether edge is compatible
-            if new_g.degree(v1) == capacity[t1] or new_g.degree(v2) == capacity[t2]:
-                i += 1
-                continue
+            #elif new_g.degree(v1) == capacity[t1] or new_g.degree(v2) == capacity[t2]:
+            #    i += 1
+                #continue
+            #
             # Get number of connections with each type
-            v1_neighbors = list(new_g.neighbors(v1))
-            v2_neighbors = list(new_g.neighbors(v2))
-            v1_types = X[v1_neighbors].sum(axis=0)
-            v2_types = X[v2_neighbors].sum(axis=0)
-            if O[t1, t2] > v1_types[t2] or O[t2, t1] > v2_types[t1]:
-                new_g.add_edge(v1, v2)
-            i += 1
-            if i >= len(idx):
+            else:
+                v1_neighbors = list(new_g.neighbors(v1))
+                v2_neighbors = list(new_g.neighbors(v2))
+                v1_types = X[v1_neighbors].sum(axis=0)
+                v2_types = X[v2_neighbors].sum(axis=0)
+                #print(v1_types,v2_types)
+                #print(O[t1,:],O[t2,:])
+                #print(O[t1,t2],v1_types[t2],O[t2,t1],v2_types[t1])
+                if O[t1, t2] > v1_types[t2] and O[t2, t1] > v2_types[t1]:
+                    new_g.add_edge(v1, v2)
+                    #print("added")
+                    #print(v1,v2)
+                i += 1
+            #print(v1,v2)
+            #print(i)
+            if i >= len(idx) and new_g.number_of_edges() < E:
+                #print("broke")
                 i = 0
                 new_g.remove_edges_from(list(new_g.edges()))
                 if fixed_edges is not None:
                     # Re-add fixed edges
                     new_g.add_edges_from(fixed_edges)
                 np.random.shuffle(idx)
-        return g
+        return new_g
             
 
     if not sample:
@@ -1442,8 +1457,8 @@ if __name__ == '__main__':
     # target = nx.Graph()
     # target.add_nodes_from(np.arange(6))
     # target.add_edges_from([[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[2,5]])
-    O = np.array([[0,1,1],[1,0,1],[1,1,0]])
-    X = np.array([[1,0,0],[0,1,0],[0,0,1],[1,0,0]])
+    O = np.array([[0,1,1],[1,0,1],[1,1,0]],dtype=int)
+    X = np.array([[1,0,0],[0,1,0],[0,0,1],[1,0,0]],dtype=int)
     capacity = O.sum(axis=1,dtype=int)
     g = nx.Graph()
     g.add_nodes_from(np.arange(4))

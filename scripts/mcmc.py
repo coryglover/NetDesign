@@ -377,6 +377,7 @@ class AssemblyTree:
             # Run simulation
             p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
             p = p / sum(p)
+            #print(p)
             for i,subgraph in enumerate(samples):
                 # Check whether probability is zero
                 if p[i] < prob_tol:
@@ -573,16 +574,18 @@ class DesignMCMC:
                 likelihood_val = np.log(p) if p > 10e-300 else np.log(10e-300) # Avoid log(0) by using a very small value
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
-
+                print("curp,posterior",self.cur_prob,posterior)
+                
                 # Calculate acceptance probability
                 #acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
                 acceptance_prob = np.exp(np.min([0, 1.0/Ti*(posterior - self.cur_prob)]))
                 # Print acceptance probability, prior_val and likelihood_val
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
-                
+                print("ac",acceptance_prob)
 
                 if np.random.rand() < acceptance_prob:
+                    print("here")
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
                     #If we only care about max a posteriori (MAP) trees
@@ -599,7 +602,7 @@ class DesignMCMC:
                         self.samples.append(copy.deepcopy(self.cur_T))
                         self.log_p.append(copy.deepcopy(self.cur_prob))
                     #The current tree is already potentially part of the current best trees so we do not need to enter update_best()
-
+                print("bestlog",self.best_logp)
         else: #TODO I DIDNT UPDATE THIS PART
             for i in tqdm(range(num_samples)):
                 # Propose a new tree

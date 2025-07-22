@@ -72,8 +72,9 @@ def main():
     # Run MCMC to find best assembly tree
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     time_int = args.num_samples // 100
-    Tis = np.linspace(5,25,args.num_samples)[::-1]
+    Tis = np.linspace(10,25,args.num_samples)[::-1]
     for i in range(100):
+        print("-------------------")
         print(np.exp(mcmc_obj.best_logp))
         print(i,flush=True)
         mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)])
