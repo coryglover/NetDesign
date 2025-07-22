@@ -20,6 +20,8 @@ def parse_args():
     parser.add_argument("--c_exclusive",action="store_true",default=False)
     parser.add_argument("--multiedge", type=int, required=False, default = 0, help="1 if multiedge")
     parser.add_argument("--MAPonly", type=int, required=False, default = 1, help="Only care about the MAP")
+    parser.add_argument("--O_file",type=str, default=None, help='Path to O file')
+    parser.add_argument("--c_file",type=str, default=None,help='Path to c file')
     return parser.parse_args()
 
 def main():
@@ -40,10 +42,17 @@ def main():
     #O = at.extract_O(target, X)
     # Get capacity vector
     capacity = at.extract_deg_cap(target, X).reshape(-1)
-    if args.c_exclusive:
-        O = (np.ones((X.shape[1],X.shape[1])) * capacity).T
+    if args.c_file is not None:
+        capacity = np.loadtxt(args.c_file)
     else:
-        O = at.extract_O(target, X)
+        capacity = at.extract_deg_cap(target, X).reshape(-1)
+    if args.O_file is not None:
+        O = np.loadtxt(args.O_file)
+    else:
+        if args.c_exclusive:
+            O = (np.ones((X.shape[1],X.shape[1])) * capacity).T
+        else:
+            O = at.extract_O(target, X)
     # Get whether multiedge
     if args.multiedge == 0:
         multiedge = False
@@ -73,9 +82,6 @@ def main():
     time_int = args.num_samples // 100
     Tis = np.linspace(10,25,args.num_samples)[::-1]
     for i in range(100):
-        print("-------------------")
-        print(np.exp(mcmc_obj.best_logp))
-        print(i,flush=True)
         mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)])
         
         
