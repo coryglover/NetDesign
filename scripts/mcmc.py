@@ -409,10 +409,10 @@ class AssemblyTree:
             subgraph_combinations = list(product(*subgraphs))
             probs_combinations = list(product(*probs))
             # Get probability of all children occuring
-            if len(subgraph_combinations) == 1:
-                probs = np.array(probs_combinations[0])
-            else:
-                probs = np.prod(np.array(probs_combinations),axis=1)
+            # if len(subgraph_combinations) == 1:
+            #     probs = np.array(probs_combinations[0])
+            # else:
+            probs = np.prod(np.array(probs_combinations),axis=1)
         
             # Loop through subgraph combinations
             for i,subgraph in enumerate(subgraph_combinations):
