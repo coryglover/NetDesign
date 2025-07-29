@@ -98,9 +98,9 @@ class AssemblyTree:
         # Get list of old leaves 
         old_leaves = self.Tree.leaves()
         if dist is None:
-            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point'],p=[0.2,0.2,0.2,0.2,0.2])
+            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point','remove_branching_point'],p=[1/6 for _ in range(6)])
         else:
-            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point'],p=dist)
+            operation = np.random.choice(['split','merge','redistribute','complete_branch','add_branching_point','remove_branching_point'],p=dist)
         # Perform opertation
         if operation == 'split':
             # Make list of leaves with more than 2 nodes
@@ -208,8 +208,36 @@ class AssemblyTree:
                     parent = self.Tree.parent(node.identifier)
                     nodes_to_update.append(parent)
 
+        elif operation == "remove_branching_point":
+            # Make list of all branching points
+            treenodes = self.Tree.all_nodes()
+            treenodes = [treenode for treenode in treenodes if len(self.Tree.children(treenode.identifier))>1 and treenode.identifier != self.Tree.root]
+            
+            # If no such nodes exist, return
+            if len(treenodes) == 0:
+                return False
+            
+
+            #Choose one of these nodes to remove
+            node_id = random.choice(treenodes)
+            # Get parent of node
+            parent = self.Tree.parent(node_id.identifier)
+            nodes_to_update = [parent]
+            # Remove branching point
+            self.remove_branching_point(node_id.identifier)
+
+            # Update probablity
+            while len(nodes_to_update) > 0:
+                node = nodes_to_update.pop(0)
+                self.update_prob(node.identifier,max_iters=max_iters)
+                if self.Tree.parent(node.identifier) is not None:
+                    parent = self.Tree.parent(node.identifier)
+                    nodes_to_update.append(parent)
+
+
+
         #New leaves are not created when you add branching point
-        if operation != "add_branching_point":
+        if operation != "add_branching_point" or operation != "remove_branching_point":
             # Update probability of node assembling into a subgraph of G
             # Get children of node
 
@@ -344,6 +372,24 @@ class AssemblyTree:
         self.Tree.create_node(data = branch_node, parent = node_id, identifier = next_node)
         for c in children_to_merge:
             self.Tree.move_node(c.identifier,next_node)
+    
+    def remove_branching_point(self,node_id):
+        """
+        Remove a branching point node and reconnect its children to its parent.
+        
+        Parameters
+        ----------
+        node_id : int -- The ID of the node to remove.
+        """
+        # Get parent of node
+        parent = self.Tree.parent(node_id)
+        # Get children of node
+        children = self.Tree.children(node_id)
+        # Move children to parent
+        for child in children:
+            self.Tree.move_node(child.identifier,parent.identifier)
+        # Remove node
+        self.Tree.remove_node(node_id)
 
 
     def update_prob(self,node_id,prob_tol=10e-5,max_iters=1000):
@@ -542,7 +588,7 @@ class DesignMCMC:
         self.best_Ts = [T]
         pass
     
-    def run_mcmc(self, num_samples, Tis, prior='uniform',verbose=False, MAPonly = True):
+    def run_mcmc(self, num_samples, Tis, prior='uniform',verbose=False, MAPonly = True, dist=None):
         """
         Run the MCMC sampling algorithm.
         
@@ -561,7 +607,7 @@ class DesignMCMC:
                 # Propose a new tree
                 update_success = False
                 while update_success == False:
-                    update_success = self.proposed_T.update_tree()
+                    update_success = self.proposed_T.update_tree(dist=dist)
 
                 # Get prior of tree
                 if prior == 'depth':
@@ -585,6 +631,7 @@ class DesignMCMC:
                 print("ac",acceptance_prob)
 
                 if np.random.rand() < acceptance_prob:
+                # if np.random.rand() <= 2:
                     
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
