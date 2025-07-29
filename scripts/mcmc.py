@@ -630,8 +630,8 @@ class DesignMCMC:
                 # Update current tree and probability if accepted
                 print("ac",acceptance_prob)
 
-                if np.random.rand() < acceptance_prob:
-                # if np.random.rand() <= 2:
+                # if np.random.rand() < acceptance_prob:
+                if np.random.rand() <= 2:
                     
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
