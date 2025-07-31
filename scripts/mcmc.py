@@ -24,6 +24,37 @@ def get_integer_partition(n,m=None):
         return random.choice([p for p in partitions if len(p)==m])
     else:
         return random.choice(partitions)
+    
+def convert_to_tuple(data):
+    if isinstance(data, list):
+        return tuple(convert_to_tuple(item) for item in data)
+    return data
+    
+def encode_tree(node, AssemblyTree, count=False):
+    if count:
+        # Base case: if the node is a leaf, return just the count
+        if not node.is_leaf(AssemblyTree.Tree) or len(AssemblyTree.Tree.children(node.identifier)) == 0:
+            return (len(node.data.nodes),)
+        
+        # Otherwise, encode the subtree for each child
+        encoded_children = tuple(encode_tree(child, AssemblyTree, count=True) for child in sorted(
+            AssemblyTree.Tree.children(node.identifier),
+            key=lambda v: (-AssemblyTree.Tree.depth(v), -len(v.data.nodes))
+        ))
+        
+        return (len(node.data.nodes),) + (encoded_children,)
+    else:
+        # Base case: if the node is a leaf, return just the count
+        if not node.is_leaf(AssemblyTree.Tree) or len(AssemblyTree.Tree.children(node.identifier)) == 0:
+            return (tuple(AssemblyTree.X[sorted(node.data.nodes), :].sum(axis=0).tolist()),)
+        
+        # Otherwise, encode the subtree for each child
+        encoded_children = tuple(encode_tree(child, AssemblyTree, count=False) for child in sorted(
+            AssemblyTree.Tree.children(node.identifier),
+            key=lambda v: (-AssemblyTree.Tree.depth(v), -len(v.data.nodes), min(v.data.nodes))
+        ))
+        
+        return (tuple(AssemblyTree.X[sorted(node.data.nodes), :].sum(axis=0).tolist()),) + (encoded_children,)
 
 class AssemblyTree:
     '''
@@ -84,7 +115,16 @@ class AssemblyTree:
         self.G.add_nodes_from(self.nodes)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
         self.success = True
+        # self.known_p = {}
+        # self.known_target = {}
         self.update_prob(0)
+        # cur_dist = encode_tree(self.Tree.get_node(0),self,count=False)
+        # cur_dist = convert_to_tuple(cur_dist)
+        # self.known_p[cur_dist] = self.Tree.get_node(0).data.p
+        self.self_assembly_p = copy.deepcopy(self.Tree.get_node(0).data.p)
+        self.self_assembly_target = copy.deepcopy(self.Tree.get_node(0).data.subgraph)
+
+        # self.known_target[cur_dist] = self.Tree.get_node(0).data.subgraph
         
 
     def update_tree(self,dist=None,max_iters=100):
@@ -355,6 +395,13 @@ class AssemblyTree:
         else:
             children_to_merge = random.sample(self.Tree.children(node_id),random.randint(2,len(self.Tree.children(node_id))-1))
         
+        # Check that all children do not have one node
+        nodes = 0
+        for c in children_to_merge:
+            nodes += c.data.count
+        if nodes == len(children_to_merge):
+            # print('No update performed')
+            return False
         #The graph_nodes of the branching point node will be the union of all its children's nodes
         graph_nodes = []
         for c in children_to_merge:
@@ -401,6 +448,9 @@ class AssemblyTree:
         ----------
         node_id : int -- The ID of the node to update.
         """
+        # print('Node id',node_id)
+        # print('Nodes in tree node',self.Tree.get_node(node_id).data.nodes)
+        # self.Tree.show()
         # Get graph node in tree node
         node = self.Tree.get_node(node_id)
         # Get sub_nodes
@@ -417,6 +467,22 @@ class AssemblyTree:
             node.data.subgraph.append(None)
         # If no children, simulate leaf node
         elif node.is_leaf() or self.Tree.depth() == 0:
+            # Check whether probability is known
+            # cur_dist = encode_tree(node,self,count=False)
+            # cur_dist = convert_to_tuple(cur_dist)
+            # cur_dist = tuple(self.X[sorted(sub_nodes),:].sum(axis=0))
+            # if cur_dist in self.known_p:
+            #     # print('here')
+            #     node.data.p = self.known_p[cur_dist]
+            #     node.data.subgraph = self.known_target[cur_dist]
+            #     return
+            if self.Tree.depth() == 0:
+                try:
+                    node.data.p = self.self_assembly_p
+                    node.data.subgraph = self.self_assembly_target
+                    return
+                except:
+                    first_run = True
             # Create initial graph with sub_nodes
             initial_graph = nx.Graph()
             initial_graph.add_nodes_from(sub_nodes)
@@ -447,7 +513,18 @@ class AssemblyTree:
                     node.data.success = success
                     if success is False:
                         self.success = False
+            # cur_dist = encode_tree(node,self,count=False)
+            # cur_dist = convert_to_tuple(cur_dist)
+            # # Update known probabilities
+            # self.known_p[cur_dist] = copy.deepcopy(node.data.p)
+            # self.known_target[cur_dist] = copy.deepcopy(node.data.subgraph)
         else:
+            # cur_dist = encode_tree(node,self,count=False)
+            # # cur_dist = convert_to_tuple(cur_dist)
+            # if cur_dist in self.known_p:
+            #     node.data.p = self.known_p[cur_dist]
+            #     node.data.subgraph = self.known_target[cur_dist]
+            #     return
             # Get all possible subgraph combinations
             subgraphs = [self.Tree.get_node(c).data.subgraph for c in children]
             probs = [self.Tree.get_node(c).data.p for c in children]
@@ -488,7 +565,13 @@ class AssemblyTree:
                         node.data.subgraph.append(s)
                         if success is False:
                             self.success = False
-
+        # cur_dist = encode_tree(node,self,count=False)
+        # # cur_dist = convert_to_tuple(cur_dist)
+        # # Update known probabilities
+        # if cur_dist not in self.known_p:
+        #     self.known_p[cur_dist] = copy.deepcopy(node.data.p)
+        #     self.known_target[cur_dist] = copy.deepcopy(node.data.subgraph)
+        
 class AssemblyNode():
     """
     AssemblyNode class for representing nodes in the assembly tree.
@@ -620,7 +703,7 @@ class DesignMCMC:
                 likelihood_val = np.log(p) if p > 10e-300 else np.log(10e-300) # Avoid log(0) by using a very small value
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
-                print("curp,posterior",self.cur_prob,posterior)
+                # print("curp,posterior",self.cur_prob,posterior)
                 
                 # Calculate acceptance probability
                 #acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
@@ -628,7 +711,7 @@ class DesignMCMC:
                 # Print acceptance probability, prior_val and likelihood_val
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
-                print("ac",acceptance_prob)
+                # print("ac",acceptance_prob)
 
                 # if np.random.rand() < acceptance_prob:
                 if np.random.rand() <= 2:
@@ -638,7 +721,7 @@ class DesignMCMC:
                     #If we only care about max a posteriori (MAP) trees
                     if MAPonly:
                         self.update_best()
-                        print(len(self.best_Ts))
+                        # print(len(self.best_Ts))
                     #If we want full distribution
                     if not MAPonly:
                         self.samples.append(copy.deepcopy(self.cur_T))
@@ -650,13 +733,15 @@ class DesignMCMC:
                         self.samples.append(copy.deepcopy(self.cur_T))
                         self.log_p.append(copy.deepcopy(self.cur_prob))
                     #The current tree is already potentially part of the current best trees so we do not need to enter update_best()
-                print("bestlog",self.best_logp)
+                # print("bestlog",self.best_logp)
         else: #TODO I DIDNT UPDATE THIS PART
             for i in tqdm(range(num_samples)):
+                #The temperature at time step i
+                Ti = Tis[i]#T0*(1- i/num_samples)
                 # Propose a new tree
                 update_success = False
                 while update_success == False:
-                    update_success = self.proposed_T.update_tree()
+                    update_success = self.proposed_T.update_tree(dist=dist)
 
                 # Get prior of tree
                 if prior == 'depth':
@@ -666,25 +751,40 @@ class DesignMCMC:
                     prior_val = 0
                 # Get likelihood of tree
                 p = sum(self.proposed_T.Tree.get_node(0).data.p)
-                likelihood_val = np.log(p) if p > 0 else np.log(10e-300) # Avoid log(0) by using a small value
+                likelihood_val = np.log(p) if p > 10e-300 else np.log(10e-300) # Avoid log(0) by using a very small value
                 # Calculate new posterior log prob
                 posterior = prior_val + likelihood_val
+                # print("curp,posterior",self.cur_prob,posterior)
+                
                 # Calculate acceptance probability
                 #acceptance_prob = np.min([1, np.exp(posterior - self.cur_prob)])
-                acceptance_prob = np.min([0, 1/Ti*(posterior - self.cur_prob)])
+                acceptance_prob = np.exp(np.min([0, 1.0/Ti*(posterior - self.cur_prob)]))
                 # Print acceptance probability, prior_val and likelihood_val
                 # print(f"Iteration {i+1}/{num_samples}, Acceptance Probability: {acceptance_prob:.4f}, Prior: {prior_val:.4f}, Likelihood: {likelihood_val:.4f}, Previous Posterior: {self.cur_prob:.4f}, New Posterior: {posterior:.4f}")
                 # Update current tree and probability if accepted
-                if np.random.rand() < acceptance_prob:
+                # print("ac",acceptance_prob)
+
+                # if np.random.rand() < acceptance_prob:
+                if np.random.rand() <= 2:
+                    
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior
-                    self.samples.append(copy.deepcopy(self.cur_T))
-                    self.log_p.append(posterior)
+                    #If we only care about max a posteriori (MAP) trees
+                    if MAPonly:
+                        self.update_best()
+                        # print(len(self.best_Ts))
+                    #If we want full distribution
+                    if not MAPonly:
+                        self.samples.append(copy.deepcopy(self.cur_T))
+                        self.log_p.append(posterior)
                 else:
                     # If not accepted, revert to the current tree
                     self.proposed_T = copy.deepcopy(self.cur_T)
-                    self.samples.append(copy.deepcopy(self.cur_T))
-                    self.log_p.append(copy.deepcopy(self.cur_prob))
+                    if not MAPonly:
+                        self.samples.append(copy.deepcopy(self.cur_T))
+                        self.log_p.append(copy.deepcopy(self.cur_prob))
+                    #The current tree is already potentially part of the current best trees so we do not need to enter update_best()
+                # print("bestlog",self.best_logp)
         # Update the estimated probability distribution of the assembly tree
         if not MAPonly:
             self.update_dist()
