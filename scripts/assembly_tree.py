@@ -146,7 +146,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
     nodes = list(initial_graph.nodes())
     N = len(nodes)
     pos_edges = N*(N-1) // 2
-
+    
 
     # Create the constraint matrix
     capacity_constraints = np.zeros((N,pos_edges))
@@ -180,6 +180,12 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
     b_l = np.zeros_like(b_u)
     # Create the solution coefficients
     c = -np.ones(pos_edges - len(edges_idx))
+    # if len(c) == 0:
+    #     if solution:
+    #         if ret_edges:
+    #             return np.array([]), np.array([])
+    #         return np.array([])
+    # print(c,pos_edges,initial_graph.edges())
     integrality = np.ones_like(c)
     # Create the linear constraint
     constraints = LinearConstraint(constraint_mat, b_l, b_u)
