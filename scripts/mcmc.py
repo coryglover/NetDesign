@@ -1,6 +1,8 @@
 import assembly_tree as at
-import numpy as np
+import numpy as np 
+np.random.seed(0)
 import random
+random.seed(0)
 import sympy
 from scipy.special import stirling2
 import networkx as nx
@@ -579,13 +581,18 @@ class DesignMCMC:
         """
         self.cur_T = T
         self.proposed_T = copy.copy(T)
-        self.cur_prob = copy.deepcopy(np.log(sum(self.cur_T.Tree.get_node(0).data.p)))
+        if sum(self.cur_T.Tree.get_node(0).data.p) == 0:
+            self.cur_prob = copy.deepcopy(np.log(sum(self.cur_T.Tree.get_node(0).data.p)))
+        else:
+            print(f"Log 0 occurred")
+            self.cur_prob = np.log(10e-4)
         self.samples = []
         self.log_p = []
         self.unique_samples = []
         self.dist = []
         self.best_logp = self.cur_prob#-200
         self.best_Ts = [T]
+        print('MCMC.py after log prob warning')
         pass
     
     def run_mcmc(self, num_samples, Tis, prior='uniform',verbose=False, MAPonly = True, dist=None):

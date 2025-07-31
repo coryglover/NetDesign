@@ -9,7 +9,11 @@ import networkx as nx
 import numpy as np
 import json
 import time 
-
+import os
+import multiprocessing
+print("PID:", os.getpid())
+print("OMP_NUM_THREADS:", os.getenv("OMP_NUM_THREADS"))
+print("Available CPUs:", multiprocessing.cpu_count())
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Run MCMC to identify best trees for datasets.")
@@ -80,9 +84,10 @@ def main():
     # Run MCMC to find best assembly tree
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     time_int = args.num_samples // 100
-    Tis = np.linspace(10,25,args.num_samples)[::-1]
+    #Tis = np.linspace(10,25,args.num_samples)[::-1]
+    Tis = np.ones(args.num_samples)
     for i in range(100):
-        mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)])
+        mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)],dist=[.25,.25,0,0,.25,.25])
         
         
         if time.time() - start > 900:
