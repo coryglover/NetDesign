@@ -2,7 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=4GB
+#SBATCH --mem=100GB
 #SBATCH --time=5-00:00:00
 #SBATCH --job-name=Prot1
 #SBATCH --partition=netsi_standard
@@ -10,6 +10,14 @@
 #SBATCH --error=/scratch/glover.co/NetDesign/err/mcmc_%A_%a.log
 #SBATCH --array=1-20%5
 
+set -x
+
+echo "hello from bash"
+
+trap 'echo "Caught SIGTERM at $(date)"' TERM
+trap 'echo "Caught SIGINT at $(date)"' INT
+trap 'echo "Exited with code $?"' EXIT
+ 
 # Read in parameters file
 PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/proteins/mcmc_params_1.txt)
 

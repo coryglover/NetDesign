@@ -664,7 +664,7 @@ class DesignMCMC:
         """
         self.cur_T = T
         self.proposed_T = copy.copy(T)
-        if sum(self.cur_T.Tree.get_node(0).data.p) == 0:
+        if sum(self.cur_T.Tree.get_node(0).data.p) != 0:
             self.cur_prob = copy.deepcopy(np.log(sum(self.cur_T.Tree.get_node(0).data.p)))
         else:
             print(f"Log 0 occurred")
@@ -720,8 +720,8 @@ class DesignMCMC:
                 # Update current tree and probability if accepted
                 # print("ac",acceptance_prob)
 
-                # if np.random.rand() < acceptance_prob:
-                if np.random.rand() <= 2:
+                if np.random.rand() < acceptance_prob:
+                #if np.random.rand() <= 2:
                     
                     self.cur_T = copy.deepcopy(self.proposed_T)
                     self.cur_prob = posterior

@@ -63,9 +63,12 @@ def main():
     else:
         multiedge = True
     # Initialize first assembly tree
+    print("Create assembly tree object in run_mcmc.py")
     initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
+    print("Initial assembly tree successfully created in run_mcmc.py")
     if target.number_of_nodes() <= 2 or max(initial_tree.Tree.get_node(0).data.p) == 1.0:
         # If the graph has 2 or fewer nodes, we can directly return the initial tree
+        print("Saving trivial example in run_mcmc.py")
         best_trees_dicts = [initial_tree.Tree.to_dict(with_data=True)]
         for i, tree in enumerate(best_trees_dicts):
             best_trees_dicts[i] = mcmc.expand_tree(tree)
@@ -80,15 +83,19 @@ def main():
         stats[:,1] = initial_tree.Tree.depth()
         stats[:,2] = time.time() - start
         np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+        print("Saved trivial example in run_mcmc.py")
         return
     # Run MCMC to find best assembly tree
+    print('Run_mcmc before Design MCMC object creation')
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
+    print('Run_mcmc after DesignMCMC object creation')
     time_int = args.num_samples // 100
     #Tis = np.linspace(10,25,args.num_samples)[::-1]
     Tis = np.ones(args.num_samples)
     for i in range(100):
+        print('Run mcmc before running object')
         mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)],dist=[.25,.25,0,0,.25,.25])
-        
+        print(f'Run mcmc after running object {i}')
         
         if time.time() - start > 900:
     
@@ -227,7 +234,9 @@ def main():
     np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
 
 if __name__ == "__main__":
+    print('Entered run_mcmc.py')
     main()
+    print('finished run_mcmc.py')
 
 # This script is designed to be run on a cluster with the necessary dependencies installed.
 # It uses argparse to handle command line arguments for flexibility in specifying input files and parameters.
