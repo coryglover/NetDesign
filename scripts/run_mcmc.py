@@ -63,8 +63,18 @@ def main():
     else:
         multiedge = True
     # Initialize first assembly tree
-    print("Create assembly tree object in run_mcmc.py")
-    initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
+    # CHeck whether current last tree exists
+    if os.path.exists(os.path.join(args.output, f"{graph_name}_tree.json")):
+        print(f"Last tree already exists in {args.output}")
+        # Initialize assembly tree from last tree
+        # Load json
+        with open(os.path.join(args.output, f"{graph_name}_tree.json"), 'r') as f:
+            last_tree = json.load(f)
+        initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
+        initial_tree = at.create_tree_from_json(last_tree, initial_tree)
+    else:    
+        print("Create assembly tree object in run_mcmc.py if does not exist")
+        initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
     print("Initial assembly tree successfully created in run_mcmc.py")
     if target.number_of_nodes() <= 2 or max(initial_tree.Tree.get_node(0).data.p) == 1.0:
         # If the graph has 2 or fewer nodes, we can directly return the initial tree

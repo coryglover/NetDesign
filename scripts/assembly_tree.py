@@ -17,6 +17,23 @@ from scipy.optimize import milp
 from scipy.optimize import LinearConstraint
 import random
 import time
+import mcmc
+
+def create_tree_from_json(f,tree,parent=None):
+    nodes_to_add = list(f.keys())
+    if 'success' in nodes_to_add:
+        nodes_to_add.remove('success')        
+    while len(nodes_to_add) > 0:
+        node = nodes_to_add.pop(0)
+        if parent is not None:
+            tree.Tree.create_node(int(node), int(node), parent=parent, data=mcmc.AssemblyNode(f[node]['data'],tree.X,tree.O,tree.capacity))
+        # Check whether node has children
+        if 'children' in f[str(node)]:
+            children = f[str(node)]['children']
+            for child in children:
+                create_tree_from_json(child, tree, parent=int(node))
+        tree.update_prob(int(node))
+    return tree
 
 def cut_graph(g,pairs):
     cutset = set()
@@ -221,7 +238,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=False):
+def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
