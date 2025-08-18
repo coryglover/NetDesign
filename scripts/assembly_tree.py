@@ -190,7 +190,9 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
     # Create the linear constraint
     constraints = LinearConstraint(constraint_mat, b_l, b_u)
     # Solve the linear programming problem
-    res = milp(c=c, constraints=constraints, integrality=integrality, bounds=(0,1), options={'disp':disp})
+    print('start milp')
+    res = milp(c=c, constraints=constraints, integrality=integrality, bounds=(0,1), options={'disp':disp, 'time_limit': 120})
+    print(res.success)
     if res.success:
         if solution:
             if ret_edges:
@@ -219,7 +221,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=True):
+def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=False):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
@@ -951,7 +953,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     A_flat, edges = find_optimal_edge_count(X,O,capacity,initial_graph=initial_graph.copy(),solution=False,disp=False,ret_edges=True)
                     if A_flat is None:
                         success = False
-                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=1000,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
                         if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                             continue
                     else:
@@ -974,7 +976,7 @@ def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbo
                     A_flat, edges = find_optimal_edge_count(X,O,capacity,initial_graph=initial_graph.copy(),solution=False,disp=False,ret_edges=True)
                     if A_flat is None:
                         success = False
-                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=T,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
+                        test_g, rates = microcanonical_ensemble(X,O,capacity,T=1000,initial_graph=initial_graph.copy(),multiedge=multiedge,kappa_d=.1,ret_rates = True,max_edges=max_edges)
                         if rates[:-test_g.number_of_nodes()].sum() != 0 and max_edges is False:
                             continue
                     else:
