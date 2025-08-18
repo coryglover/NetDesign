@@ -219,7 +219,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
-def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=True):
+def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=False):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
