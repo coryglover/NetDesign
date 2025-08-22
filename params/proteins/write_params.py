@@ -1,7 +1,7 @@
 import os
 import sys
 
-mcmc = True
+mcmc = False
 
 # Get paths for humans, mouse, and yeast
 protein_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/proteins'
@@ -15,7 +15,7 @@ with open('all_nets.txt', 'r') as f:
 for j, net in enumerate(networks_to_consider):
     subdir = net.split('/')[0]
     graph_file = f'{protein_path}/{net}'
-    base_name = graph_file[:-5]
+    base_name = graph_file.split('/')[-1][:-5]
     X_file = protein_path + f'/{subdir}/Xfiles/X_{base_name}.txt'
     # add line to file
     if mcmc:

@@ -3,7 +3,7 @@ import sys
 import json
 import numpy as np
 
-mcmc = True 
+mcmc = False 
 
 # Get paths for molecules
 # molecule_path = '/scratch/glover.co/NetDesign/data/molecules/WHO'
@@ -18,7 +18,7 @@ with open('all_nets.txt', 'r') as f:
 for j, net in enumerate(networks_to_consider):
     subdir = net.split('/')[0]
     graph_file = f'{molecule_path}/{net}'
-    base_name = graph_file[:-5]
+    base_name = graph_file.split('/')[-1][:-5]
     X_file = molecule_path + f'/{subdir}/Xfiles/X_{base_name}.txt'
     # add line to file
     if mcmc:
