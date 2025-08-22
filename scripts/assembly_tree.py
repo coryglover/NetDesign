@@ -19,7 +19,7 @@ import random
 import time
 import mcmc
 
-def create_tree_from_json(f,tree,parent=None):
+def load_tree(f,tree,parent=None):
     nodes_to_add = list(f.keys())
     if 'success' in nodes_to_add:
         nodes_to_add.remove('success')        
@@ -31,7 +31,7 @@ def create_tree_from_json(f,tree,parent=None):
         if 'children' in f[str(node)]:
             children = f[str(node)]['children']
             for child in children:
-                create_tree_from_json(child, tree, parent=int(node))
+                load_tree(child, tree, parent=int(node))
         tree.update_prob(int(node))
     return tree
 
@@ -943,7 +943,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     '''
     # return g
 
-def prob_dist(X,O,capacity,max_iters=10,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
+def prob_dist(X,O,capacity,max_iters=100,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
     """
     Extract empirical distribution of system.
     
