@@ -107,9 +107,9 @@ def main():
             sa_p = 0
     
     # Get name information
-    graph_name = graph_file.split('/')[-1]
+    graph_name = args.graph_file.split('/')[-1]
     name = graph_name.split('.')[0]
-    subdir = graph_file.split('/')[7]
+    subdir = args.graph_file.split('/')[7]
 
     graph_stats = {
         'name': name,
