@@ -35,7 +35,7 @@ def main():
 
     # Load graph
     target = nx.read_edgelist(args.graph_file, nodetype=int, create_using=nx.MultiGraph)
-
+    print(f"Loaded graph with {target.number_of_nodes()} nodes and {target.number_of_edges()} edges.")
     # Load labels
     X = np.loadtxt(args.X_file, dtype=int)
 
