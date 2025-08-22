@@ -19,7 +19,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    
     # Check if dataframe exists
     if os.path.exists(args.output):
         df = pd.read_csv(args.output, index_col=0)
@@ -153,7 +153,8 @@ def main():
             # Save the dataframe to the output file
             df.to_csv(args.output, index=False)
 
-
+if __name__ == "__main__":
+    main()
     
 
     
