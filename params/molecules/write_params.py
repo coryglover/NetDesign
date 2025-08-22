@@ -3,11 +3,11 @@ import sys
 import json
 import numpy as np
 
-mcmc = False 
+mcmc = True 
 
 # Get paths for molecules
-# molecule_path = '/scratch/glover.co/NetDesign/data/molecules/WHO'
-molecule_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/molecules'
+molecule_path = '/scratch/glover.co/NetDesign/data/molecules'
+# molecule_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/molecules'
 lines_to_write = []
 
 # Read networks to consider

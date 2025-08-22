@@ -1,11 +1,11 @@
 import os
 import sys
 
-mcmc = False
+mcmc = True
 
 # Get paths for humans, mouse, and yeast
-# circuit_path = '/scratch/glover.co/NetDesign/data/circuits'
-circuit_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/circuits'
+circuit_path = '/scratch/glover.co/NetDesign/data/circuits'
+# circuit_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/circuits'
 lines_to_write = []
 
 # Read networks to consider

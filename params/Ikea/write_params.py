@@ -1,11 +1,11 @@
 import os
 import sys
 
-mcmc = False 
+mcmc = True 
 
 # Get paths for humans, mouse, and yeast
 ikea_path = '/scratch/glover.co/NetDesign/data/IkeaData'
-ikea_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/IkeaData'
+# ikea_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/IkeaData'
 lines_to_write = []
 
 # Read networks to consider

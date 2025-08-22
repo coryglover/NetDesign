@@ -1,10 +1,11 @@
 import os
 import sys
 
-mcmc = False 
+mcmc = True 
 
 # Get paths for humans, mouse, and yeast
-robot_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/robots'
+# robot_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/robots'
+robot_path = '/scratch/glover.co/NetDesign/data/robots'
 lines_to_write = []
 
 # Read networks to consider

@@ -1,10 +1,11 @@
 import os
 import sys
 
-mcmc = False
+mcmc = True
 
 # Get paths for humans, mouse, and yeast
-protein_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/proteins'
+# protein_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/proteins'
+protein_path = '/scratch/glover.co/NetDesign/data/proteins'
 lines_to_write = []
 
 # Read networks to consider
