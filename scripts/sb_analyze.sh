@@ -8,7 +8,7 @@
 #SBATCH --partition=short
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
-#SBATCH --array=1-619%1
+#SBATCH --array=1-619%1 
 
 set -x
 
