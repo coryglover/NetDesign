@@ -3,7 +3,7 @@ import sys
 import json
 import numpy as np
 
-mcmc = True 
+mcmc = False 
 
 # Get paths for molecules
 molecule_path = '/scratch/glover.co/NetDesign/data/molecules'
@@ -22,9 +22,9 @@ for j, net in enumerate(networks_to_consider):
     X_file = molecule_path + f'/{subdir}/Xfiles/X_{base_name}.txt'
     # add line to file
     if mcmc:
-        line = f'--graph_file {graph_file} --X_file {X_file} --num_samples 100000 --output {molecule_path}/{subdir}/treefiles/'
+        line = f'--graph_file {graph_file} --X_file {X_file} --num_samples 100000 --output {molecule_path}/{subdir}/treefiles/ --c_exclusive'
     else:
-        line = f'--graph_file {graph_file} --X_file {X_file} --tree_file {molecule_path}/{subdir}/treefiles/{base_name}_tree.json --output {molecule_path}/stats/assembly_stats.csv'
+        line = f'--graph_file {graph_file} --X_file {X_file} --tree_file {molecule_path}/{subdir}/treefiles/{base_name}_tree.json --output {molecule_path}/stats/assembly_stats.csv --c_exclusive'
     lines_to_write.append(line)
 
 if mcmc:

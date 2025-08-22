@@ -1,7 +1,7 @@
 import os
 import sys
 
-mcmc = True 
+mcmc = False 
 
 # Get paths for humans, mouse, and yeast
 # robot_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/robots'
@@ -20,9 +20,9 @@ for j, net in enumerate(networks_to_consider):
     X_file = robot_path + f'/{subdir}/Xfiles/X_{base_name}.txt'
     # add line to file
     if mcmc:
-        line = f'--graph_file {graph_file} --X_file {X_file} --num_samples 100000 --output {robot_path}/{subdir}/treefiles/'
+        line = f'--graph_file {graph_file} --X_file {X_file} --num_samples 100000 --output {robot_path}/{subdir}/treefiles/ --O_file {robot_path}/{subdir}/Ofiles/O_{base_name}.txt --c_file {robot_path}/{subdir}/cfiles/c_{base_name}.txt'
     else:
-        line = f'--graph_file {graph_file} --X_file {X_file} --tree_file {robot_path}/{subdir}/treefiles/{base_name}_tree.json --output {robot_path}/stats/assembly_stats.csv'
+        line = f'--graph_file {graph_file} --X_file {X_file} --tree_file {robot_path}/{subdir}/treefiles/{base_name}_tree.json --output {robot_path}/stats/assembly_stats.csv --O_file {robot_path}/{subdir}/Ofiles/O_{base_name}.txt --c_file {robot_path}/{subdir}/cfiles/c_{base_name}.txt'
     lines_to_write.append(line)
 
 if mcmc:
