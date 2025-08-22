@@ -14,7 +14,9 @@ def parse_args():
     parser.add_argument('--X_file', type=str, required=True, help='File containing node labels.')
     parser.add_argument('--tree_file', type=str, required=True, help='File containing the assembly tree.')
     parser.add_argument('--output', type=str, required=True, help='File to save results.')
-
+    parser.add_argument("--c_exclusive",action="store_true",default=False)
+    parser.add_argument("--O_file",type=str, default=None, help='Path to O file')
+    parser.add_argument("--c_file",type=str, default=None,help='Path to c file')
     return parser.parse_args()
 
 def main():
@@ -38,7 +40,8 @@ def main():
     print(f"Loaded graph with {target.number_of_nodes()} nodes and {target.number_of_edges()} edges.")
     # Load labels
     X = np.loadtxt(args.X_file, dtype=int)
-
+    if X.ndim == 1:
+        X = X.reshape(len(X),1)
     # Get capacity vector
     capacity = at.extract_deg_cap(target, X).reshape(-1)
     if args.c_file is not None:
