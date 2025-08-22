@@ -96,14 +96,24 @@ def main():
         clustering_coeff = np.mean(list(clustering_coeff.values()))
     
     # Get self assembly probability
-    p, samples, idx, success = at.prob_dist(X, O, capacity, max_iters=100)
-    if len(p) == 1:
-        if nx.is_isomorphic(target, samples[0]):
-            sa_p = 1
-    else:
+    if max_edges != E:
         sa_p = 0
+    else:
+        p, samples, idx, success = at.prob_dist(X, O, capacity, max_iters=100)
+        if len(p) == 1:
+            if nx.is_isomorphic(target, samples[0]):
+                sa_p = 1
+        else:
+            sa_p = 0
     
+    # Get name information
+    graph_name = graph_file.split('/')[-1]
+    name = graph_name.split('.')[0]
+    subdir = graph_file.split('/')[7]
+
     graph_stats = {
+        'name': name,
+        'subdir': subdir,
         'N': N,
         'E': E,
         'N_types': N_types,

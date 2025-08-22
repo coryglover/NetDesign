@@ -1,0 +1,1 @@
+--graph_file /scratch/glover.co/NetDesign/data/proteins/human/edgefiles/CPX-1949.edge --X_file /scratch/glover.co/NetDesign/data/proteins/human/Xfiles/X_CPX-1949.txt --num_samples 1000 --output /scratch/glover.co/NetDesign/data/proteins/human/treefiles/CPX-1949

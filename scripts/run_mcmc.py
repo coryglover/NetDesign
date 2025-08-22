@@ -99,6 +99,28 @@ def main():
         return
     # Run MCMC to find best assembly tree
     print('Run_mcmc before Design MCMC object creation')
+    # Check whether tree can be designed
+    _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=None,solution=False,disp=False,ret_edges=True)
+    max_edges = len(opt_edges)
+
+    if max_edges != target.number_of_edges():
+        print("Saving impossible example in run_mcmc.py")
+        best_trees_dicts = [initial_tree.Tree.to_dict(with_data=True)]
+        for i, tree in enumerate(best_trees_dicts):
+            best_trees_dicts[i] = mcmc.expand_tree(tree)
+            best_trees_dicts[i]['success'] = 1
+
+        output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
+        output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
+        with open(output_tree_file, 'w') as f:
+            json.dump(best_trees_dicts, f, indent=4)
+        stats = np.zeros((1,3))
+        stats[:,0] = 1.0
+        stats[:,1] = initial_tree.Tree.depth()
+        stats[:,2] = time.time() - start
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+        print("Saved impossible example in run_mcmc.py")
+        return
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     print('Run_mcmc after DesignMCMC object creation')
     time_int = args.num_samples // 100
