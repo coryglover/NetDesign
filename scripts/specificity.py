@@ -37,6 +37,8 @@ def main():
 
     # Read in target graph
     target = nx.read_edgelist(args.graph_file, nodetype=int)
+    if target.number_of_nodes() <= 2:
+        return
     # Read in X matrix
     X = np.loadtxt(args.X_file, delimiter=' ')
     capacity = at.extract_deg_cap(target, X).reshape(-1)

@@ -3,13 +3,13 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
-#SBATCH --time=1-00:00:00
-#SBATCH --job-name=Test
-#SBATCH --partition=netsi_standard
+#SBATCH --time=5-00:00:00
+#SBATCH --job-name=Prot1
+#SBATCH --partition=long
 #SBATCH --output=/scratch/glover.co/NetDesign/out/mcmc_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/mcmc_%A_%a.log
-#SBATCH --array=1-20%5
-#SBATCH --exclude=c3105,c3016,c3107,c3108,c3109,c3110,c3111,c3112,c3113,c3114,c3115,c3116
+#SBATCH --array=1-1000%10
+##SBATCH --exclude=c3105,c3016,c3107,c3108,c3109,c3110,c3111,c3112,c3113,c3114,c3115,c3116
 set -x
 
 echo "hello from bash"
