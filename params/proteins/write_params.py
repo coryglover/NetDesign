@@ -1,7 +1,7 @@
 import os
 import sys
 
-mcmc = False
+mcmc = True
 
 # Get paths for humans, mouse, and yeast
 protein_path = '/Users/glover.co/Documents/laszlo/NetDesign/data/proteins'
@@ -19,9 +19,9 @@ for j, net in enumerate(networks_to_consider):
     X_file = protein_path + f'/{subdir}/Xfiles/X_{base_name}.txt'
     # add line to file
     if mcmc:
-        line = f'--graph_file {protein_path}/{subdir}/edgefiles/{graph_file} --X_file {X_file} --num_samples 100000 --output {protein_path}/{subdir}/treefiles/'
+        line = f'--graph_file {graph_file} --X_file {X_file} --num_samples 100000 --output {protein_path}/{subdir}/treefiles/'
     else:
-        line = f'--graph_file {protein_path}/{subdir}/edgefiles/{graph_file} --X_file {X_file} --tree_file {protein_path}/{subdir}/treefiles/{base_name}_tree.json --output {protein_path}/stats/assembly_stats.csv'
+        line = f'--graph_file {graph_file} --X_file {X_file} --tree_file {protein_path}/{subdir}/treefiles/{base_name}_tree.json --output {protein_path}/stats/assembly_stats.csv'
     lines_to_write.append(line)
 
 if mcmc:
