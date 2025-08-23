@@ -114,7 +114,7 @@ def main():
     name = graph_name.split('.')[0]
     subdir = args.graph_file.split('/')[7]
 
-    graph_stats = {
+    stats = {
         'name': name,
         'subdir': subdir,
         'N': N,
@@ -131,26 +131,52 @@ def main():
     }
 
     if len(trees) == 0:
-        stats = copy.deepcopy(graph_stats)
-        stats['tree_num'] = np.nan
-        stats['guided_assembly_probability'] = np.nan
-        stats['tree_depth'] = np.nan
-        stats['tree_leaves'] = np.nan
-        stats['tree_N'] = np.nan
-
+        stats = {
+        'name': name,
+        'subdir': subdir,
+        'N': N,
+        'E': E,
+        'N_types': N_types,
+        'capacity': capacity.tolist(),
+        'O': O.tolist(),
+        'total_psi': total_psi,
+        'degree_mean': degree_mean,
+        'degree_hetero': degree_hetero,
+        'max_edges': max_edges,
+        'clustering_coeff': clustering_coeff,
+        'self_assembly_probability': sa_p,
+        'tree_num': np.nan,
+        'guided_assembly_probability': np.nan,
+        'tree_depth': np.nan,
+        'tree_leaves': np.nan,
+        'tree_N': np.nan
+        }
         # Append the stats to the dataframe
         df = df.append(stats, ignore_index=True)
         # Save the dataframe to the output file
         df.to_csv(args.output, index=False)
     else:
         for i, T in enumerate(trees):
-            stats = copy.deepcopy(graph_stats)
-            stats[f'tree_num'] = i
-            stats[f'guided_assembly_probability'] = np.sum(T.Tree.get_node(0).data.p)
-            stats[f'tree_depth'] = T.Tree.depth()
-            stats[f'tree_leaves'] = len(T.Tree.leaves())
-            stats[f'tree_N'] = T.Tree.all_nodes()
-
+            stats = {
+            'name': name,
+            'subdir': subdir,
+            'N': N,
+            'E': E,
+            'N_types': N_types,
+            'capacity': capacity.tolist(),
+            'O': O.tolist(),
+            'total_psi': total_psi,
+            'degree_mean': degree_mean,
+            'degree_hetero': degree_hetero,
+            'max_edges': max_edges,
+            'clustering_coeff': clustering_coeff,
+            'self_assembly_probability': sa_p,
+            'tree_num': i,
+            'guided_assembly_probability': np.sum(T.Tree.get_node(0).data.p),
+            'tree_depth': T.Tree.depth(),
+            'tree_leaves': len(T.Tree.leaves()),
+            'tree_N': T.Tree.all_nodes()
+            }
             # Append the stats to the dataframe
             df = df.append(stats, ignore_index=True)
             # Save the dataframe to the output file
