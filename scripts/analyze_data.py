@@ -30,7 +30,7 @@ def main():
         df = pd.DataFrame(columns=[
             'name', 'subdir', 'N', 'E', 'N_types', 'specificity',
             'degree_mean', 'degree_hetero', 'max_edges',
-            'clustering_coeff', 'self_assembly_probability',
+            'clustering_coeff', 'max_chordless_cycle','girth','self_assembly_probability',
             'tree_num','guided_assembly_probability',
             'tree_depth','tree_leaves','tree_N'
         ])
@@ -99,6 +99,19 @@ def main():
     clustering_coeff = nx.average_clustering(target)
     if isinstance(clustering_coeff, dict):
         clustering_coeff = np.mean(list(clustering_coeff.values()))
+
+    chordless_cycle_basis = nx.chordless_cycles(target)
+    # Get largest chordless cycle length
+    if len(chordless_cycle_basis) > 0:
+        max_cycle_length = max(len(cycle) for cycle in chordless_cycle_basis)
+    else:
+        max_cycle_length = 0
+    
+    # Get girth
+    if nx.is_connected(target):
+        girth = nx.girth(target)
+    else:
+        girth = float('inf')  # If the graph is not connected, set girth to infinity
     
     # Get self assembly probability
     if max_edges != E:
@@ -123,50 +136,51 @@ def main():
     subdir = args.graph_file.split('/')[6]
 
     if len(trees) == 0:
-        stats = {
-        'name': [name],
-        'subdir': [subdir],
-        'N': [N],
-        'E': [E],
-        'N_types': [N_types],
-        'total_psi': [total_psi],
-        'degree_mean': [degree_mean],
-        'degree_hetero': [degree_hetero],
-        'max_edges': [max_edges],
-        'clustering_coeff': [clustering_coeff],
-        'self_assembly_probability': [sa_p],
-        'tree_num': [np.nan],
-        'guided_assembly_probability': [np.nan],
-        'tree_depth': [np.nan],
-        'tree_leaves': [np.nan],
-        'tree_N': [np.nan]
-        }
+        stats = [name,
+                 subdir,
+                N,
+                E,
+                N_types,
+                total_psi,
+                degree_mean,
+                degree_hetero,
+                max_edges,
+                clustering_coeff,
+                max_cycle_length,
+                girth,
+                sa_p,
+                np.nan,
+                np.nan,
+                np.nan,
+                np.nan,
+                np.nan]
         # Append the stats to the dataframe
-        df = pd.concat([df,pd.DataFrame(stats)], ignore_index=True)
+        df.iloc[len(df)] = stats
         # Save the dataframe to the output file
         df.to_csv(args.output, index=False)
     else:
         for i, T in enumerate(trees):
-            stats = {
-            'name': [name],
-            'subdir': [subdir],
-            'N': [N],
-            'E': [E],
-            'N_types': [N_types],
-            'total_psi': [total_psi],
-            'degree_mean': [degree_mean],
-            'degree_hetero': [degree_hetero],
-            'max_edges': [max_edges],
-            'clustering_coeff': [clustering_coeff],
-            'self_assembly_probability': [sa_p],
-            'tree_num': [i],
-            'guided_assembly_probability': [np.sum(T.Tree.get_node(0).data.p)],
-            'tree_depth': [T.Tree.depth()],
-            'tree_leaves': [len(T.Tree.leaves())],
-            'tree_N': [T.Tree.all_nodes()]
-            }
+            stats = [name,
+                     subdir,
+                     N,
+                     E,
+                     N_types,
+                     total_psi,
+                     degree_mean,
+                     degree_hetero,
+                     max_edges,
+                     clustering_coeff,
+                     max_cycle_length,
+                     girth,
+                     sa_p,
+                     i,
+                     np.sum(T.Tree.get_node(0).data.p),
+                     T.Tree.depth(),
+                     len(T.Tree.leaves()),
+                     T.Tree.all_nodes()]
+            
             # Append the stats to the dataframe
-            df = pd.concat([df,pd.DataFrame(stats)], ignore_index=True)
+            df.iloc[len(df)] = stats
             # Save the dataframe to the output file
             df.to_csv(args.output, index=False)
 
