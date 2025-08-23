@@ -28,7 +28,7 @@ def main():
     else:
         # Create a new dataframe with the specified columns
         df = pd.DataFrame(columns=[
-            'N', 'E', 'N_types', 'capacity', 'O', 'total_psi',
+            'name', 'subdir', 'N', 'E', 'N_types', 'specificity',
             'degree_mean', 'degree_hetero', 'max_edges',
             'clustering_coeff', 'self_assembly_probability',
             'tree_num','guided_assembly_probability',
@@ -36,7 +36,7 @@ def main():
         ])
 
     # Load graph
-    target = nx.read_edgelist(args.graph_file, nodetype=int, create_using=nx.MultiGraph)
+    target = nx.read_edgelist(args.graph_file, nodetype=int, create_using=nx.Graph)
     print(f"Loaded graph with {target.number_of_nodes()} nodes and {target.number_of_edges()} edges.")
     # Load labels
     X = np.loadtxt(args.X_file, dtype=int)
@@ -90,7 +90,9 @@ def main():
     degree_hetero = np.mean([d**2 for d in degree_sequence])
 
     # Max_edges
-    _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=None,solution=False,disp=False,ret_edges=True)
+    initial_graph = nx.Graph()
+    initial_graph.add_nodes_from(np.arange(N))
+    _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=initial_graph,solution=False,disp=False,ret_edges=True)
     max_edges = len(opt_edges)
 
     # Get clustering coefficient
@@ -102,7 +104,13 @@ def main():
     if max_edges != E:
         sa_p = 0
     else:
-        p, samples, idx, success = at.prob_dist(X, O, capacity, max_iters=100)
+        initial_graph = nx.Graph()
+        initial_graph.add_nodes_from(np.arange(N))
+        for k in range(2,100):
+            p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=k,max_edges=True,rewire_est=False)
+            if len(p) > 1:
+                break
+
         if len(p) == 1:
             if nx.is_isomorphic(target, samples[0]):
                 sa_p = 1
@@ -112,47 +120,45 @@ def main():
     # Get name information
     graph_name = args.graph_file.split('/')[-1]
     name = graph_name.split('.')[0]
-    subdir = args.graph_file.split('/')[7]
+    subdir = args.graph_file.split('/')[6]
 
     graph_stats = {
-        'name': name,
-        'subdir': subdir,
-        'N': N,
-        'E': E,
-        'N_types': N_types,
-        'capacity': capacity.tolist(),
-        'O': O.tolist(),
-        'total_psi': total_psi,
-        'degree_mean': degree_mean,
-        'degree_hetero': degree_hetero,
-        'max_edges': max_edges,
-        'clustering_coeff': clustering_coeff,
-        'self_assembly_probability': sa_p
+        'name': [name],
+        'subdir': [subdir],
+        'N': [N],
+        'E': [E],
+        'N_types': [N_types],
+        'specificity': [total_psi],
+        'degree_mean': [degree_mean],
+        'degree_hetero': [degree_hetero],
+        'max_edges': [max_edges],
+        'clustering_coeff': [clustering_coeff],
+        'self_assembly_probability': [sa_p]
     }
 
     if len(trees) == 0:
         stats = copy.deepcopy(graph_stats)
-        stats['tree_num'] = np.nan
-        stats['guided_assembly_probability'] = np.nan
-        stats['tree_depth'] = np.nan
-        stats['tree_leaves'] = np.nan
-        stats['tree_N'] = np.nan
+        stats['tree_num'] = [np.nan]
+        stats['guided_assembly_probability'] = [np.nan]
+        stats['tree_depth'] = [np.nan]
+        stats['tree_leaves'] = [np.nan]
+        stats['tree_N'] = [np.nan]
 
         # Append the stats to the dataframe
-        df = df.append(stats, ignore_index=True)
+        df = pd.concat([df,pd.DataFrame(stats)], ignore_index=True)
         # Save the dataframe to the output file
         df.to_csv(args.output, index=False)
     else:
         for i, T in enumerate(trees):
             stats = copy.deepcopy(graph_stats)
-            stats[f'tree_num'] = i
-            stats[f'guided_assembly_probability'] = np.sum(T.Tree.get_node(0).data.p)
-            stats[f'tree_depth'] = T.Tree.depth()
-            stats[f'tree_leaves'] = len(T.Tree.leaves())
-            stats[f'tree_N'] = T.Tree.all_nodes()
+            stats[f'tree_num'] = [i]
+            stats[f'guided_assembly_probability'] = [np.sum(T.Tree.get_node(0).data.p)]
+            stats[f'tree_depth'] = [T.Tree.depth()]
+            stats[f'tree_leaves'] = [len(T.Tree.leaves())]
+            stats[f'tree_N'] = [T.Tree.all_nodes()]
 
             # Append the stats to the dataframe
-            df = df.append(stats, ignore_index=True)
+            df = pd.concat([df,pd.DataFrame(stats)], ignore_index=True)
             # Save the dataframe to the output file
             df.to_csv(args.output, index=False)
 

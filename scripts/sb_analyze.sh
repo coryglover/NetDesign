@@ -3,12 +3,12 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
-#SBATCH --time=1-00:00:00
-#SBATCH --job-name=DF_Prot
-#SBATCH --partition=short
+#SBATCH --time=2-00:00:00
+#SBATCH --job-name=DF_Cir
+#SBATCH --partition=long
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
-#SBATCH --array=1-619%1 
+#SBATCH --array=1-886%1 
 
 set -x
 
@@ -23,7 +23,7 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/proteins/analysis_params.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/analysis_params.txt)
 
 
 sleep 1
