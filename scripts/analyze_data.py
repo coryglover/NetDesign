@@ -56,18 +56,6 @@ def main():
         else:
             O = at.extract_O(target, X)
 
-    # Try to load tree
-    trees = []
-    try:
-        with open(args.tree_file, 'r') as f:
-            tree_data = json.load(f)
-        for tree_dict in tree_data:
-            T = mcmc.AssemblyTree(target, X, O, capacity, multiedge=False)
-            T = T.load_tree(tree_dict, T)
-            trees.append(T)
-    except:
-        trees = []
-
     # Calculate network and design set statistics
     N = target.number_of_nodes()
     E = target.number_of_edges()
@@ -129,6 +117,18 @@ def main():
     graph_name = args.graph_file.split('/')[-1]
     name = graph_name.split('.')[0]
     subdir = args.graph_file.split('/')[6]
+
+    # Try to load tree
+    trees = []
+    try:
+        with open(args.tree_file, 'r') as f:
+            tree_data = json.load(f)
+        for tree_dict in tree_data:
+            T = mcmc.AssemblyTree(target, X, O, capacity, multiedge=False)
+            T = T.load_tree(tree_dict, T)
+            trees.append(T)
+    except:
+        trees = []
 
     if len(trees) == 0:
         stats = [name,
