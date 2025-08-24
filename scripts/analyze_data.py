@@ -97,21 +97,24 @@ def main():
         max_cycle_length = 0
      
     # Get self assembly probability
-    if max_edges != E:
-        sa_p = 0
-    else:
-        initial_graph = nx.Graph()
-        initial_graph.add_nodes_from(np.arange(N))
-        for k in range(2,100):
-            p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=k,max_edges=True,rewire_est=False)
-            if len(p) > 1:
-                break
+    # if max_edges != E:
+    #     sa_p = 0
+    # else:
+    #     initial_graph = nx.Graph()
+    #     initial_graph.add_nodes_from(np.arange(N))
+    #     for k in range(2,100):
+    #         p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=k,max_edges=True,rewire_est=False)
+    #         if len(p) > 1:
+    #             break
 
-        if len(p) == 1:
-            if nx.is_isomorphic(target, samples[0]):
-                sa_p = 1
-        else:
-            sa_p = 0
+    #     if len(p) == 1:
+    #         if nx.is_isomorphic(target, samples[0]):
+    #             sa_p = 1
+    #     else:
+    #         sa_p = 0
+    initial_graph = nx.Graph()
+    initial_graph.add_nodes_from(np.arange(N))
+    sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
     
     # Get name information
     graph_name = args.graph_file.split('/')[-1]
