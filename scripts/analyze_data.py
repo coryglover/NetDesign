@@ -30,7 +30,7 @@ def main():
         df = pd.DataFrame(columns=[
             'name', 'subdir', 'N', 'E', 'N_types', 'specificity',
             'degree_mean', 'degree_hetero', 'max_edges',
-            'clustering_coeff', 'max_chordless_cycle','girth','self_assembly_probability',
+            'clustering_coeff', 'max_chordless_cycle','self_assembly_probability',
             'tree_num','guided_assembly_probability',
             'tree_depth','tree_leaves','tree_N'
         ])
@@ -101,18 +101,13 @@ def main():
         clustering_coeff = np.mean(list(clustering_coeff.values()))
 
     chordless_cycle_basis = nx.chordless_cycles(target)
+    print(target.edges())
     # Get largest chordless cycle length
-    if len(chordless_cycle_basis) > 0:
+    if len(list(chordless_cycle_basis)) > 0:
         max_cycle_length = max(len(cycle) for cycle in chordless_cycle_basis)
     else:
         max_cycle_length = 0
-    
-    # Get girth
-    if nx.is_connected(target):
-        girth = nx.girth(target)
-    else:
-        girth = float('inf')  # If the graph is not connected, set girth to infinity
-    
+     
     # Get self assembly probability
     if max_edges != E:
         sa_p = 0
@@ -147,7 +142,6 @@ def main():
                 max_edges,
                 clustering_coeff,
                 max_cycle_length,
-                girth,
                 sa_p,
                 np.nan,
                 np.nan,
@@ -171,7 +165,6 @@ def main():
                      max_edges,
                      clustering_coeff,
                      max_cycle_length,
-                     girth,
                      sa_p,
                      i,
                      np.sum(T.Tree.get_node(0).data.p),
