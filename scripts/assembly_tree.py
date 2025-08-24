@@ -134,7 +134,7 @@ def O_respecting_rewiring(g,T):
             g.add_edge(u2,v1)
     return g 
 
-def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp=False,ret_edges=False):
+def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, solution=True, disp=False, ret_edges=False):
     """
     Using linear programming, find the optimal number of edges in a microcanonical ensemble graph
     given the node features X, the edge features O, and the capacity constraints.
@@ -144,6 +144,7 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
     X (ndarray): Label matrix
     O (ndarray): Binding matrix
     capacity (ndarray): Capacity vector
+    old_sol (ndarray, optional): Previous solution to exclude.
     initial_graph (networkx.Graph, optional): Initial graph to start the optimization from.
     solution (bool): If True, return the solution vector, otherwise return the number of edges.
     disp (bool): If True, display the optimization process.
@@ -154,8 +155,6 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
     int or ndarray: The optimal number of edges in the microcanonical ensemble graph.
     """
     # Get number of nodes and possible edges
-    
-
     if initial_graph is None:
         initial_graph = nx.Graph()
         initial_graph.add_nodes_from(N)
@@ -190,19 +189,20 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
         edges_idx.append(int(np.where((idx_i == idx_e1) & (idx_j == idx_e2))[0][0]))
     # Remove columns associated with existing edges
     constraint_mat = np.delete(constraint_mat, edges_idx, axis=1)
-    # Create the bounds
-    A = nx.adjacency_matrix(initial_graph).todense()
-    deg = initial_graph.degree()
-    b_u = np.hstack((X[nodes,:]@capacity - np.array([deg[i] for i in nodes]),(X[nodes,:]@O - A@X[nodes,:]).flatten()))
-    b_l = np.zeros_like(b_u)
+
+    # Add constraint to ensure the new solution differs from old_sol
+    if old_sol is not None:
+        diff_constraint = np.ones((1, pos_edges))
+        diff_constraint[0, :] = old_sol
+        constraint_mat = np.vstack([constraint_mat, diff_constraint])
+        b_l = np.hstack([np.zeros(constraint_mat.shape[0] - 1), [0]])  # Ensure at least one difference
+        b_u0 = np.hstack((X[nodes,:]@capacity - np.array([initial_graph.degree[i] for i in nodes]),(X[nodes,:]@O - nx.adjacency_matrix(initial_graph).todense()@X[nodes,:]).flatten()))
+        b_u = np.hstack([b_u0, [np.sum(old_sol)-1]])  # Upper bound allows overlap
+    else:
+        b_l = np.zeros(constraint_mat.shape[0])
+        b_u = np.hstack((X[nodes,:]@capacity - np.array([initial_graph.degree[i] for i in nodes]),(X[nodes,:]@O - nx.adjacency_matrix(initial_graph).todense()@X[nodes,:]).flatten()))
     # Create the solution coefficients
     c = -np.ones(pos_edges - len(edges_idx))
-    # if len(c) == 0:
-    #     if solution:
-    #         if ret_edges:
-    #             return np.array([]), np.array([])
-    #         return np.array([])
-    # print(c,pos_edges,initial_graph.edges())
     integrality = np.ones_like(c)
     # Create the linear constraint
     constraints = LinearConstraint(constraint_mat, b_l, b_u)
@@ -238,6 +238,28 @@ def find_optimal_edge_count(X,O,capacity,initial_graph=None,solution = True,disp
             return None, None
         return None
 
+def self_assembly(X,O,capacity,initial_graph):
+    """
+    Determine whether network can self-assemble.
+    
+    Parameters:
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        capacity (ndarray): Capacity vector.
+        initial_graph (networkx.Graph): Initial graph.
+    Returns:
+        bool: True if the network can self-assemble, False otherwise.
+    """
+    sol, edges = find_optimal_edge_count(X, O, capacity, initial_graph=initial_graph, solution=True, ret_edges=True)
+    if sol is None:
+        return False
+    # Check whether another solution exists
+    new_sol, new_edges = find_optimal_edge_count(X, O, capacity, old_sol=sol, initial_graph=initial_graph, solution=True, ret_edges=True)
+    if new_sol is None:
+        return True
+    else:
+        return False
+    
 def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     """
     Rewire a graph while respecting the binding matrix and node labels.
