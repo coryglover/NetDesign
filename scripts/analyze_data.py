@@ -24,7 +24,7 @@ def main():
     
     # Check if dataframe exists
     if os.path.exists(args.output):
-        df = pd.read_csv(args.output, index_col=0)
+        df = pd.read_csv(args.output, index_col=False)
     else:
         # Create a new dataframe with the specified columns
         df = pd.DataFrame(columns=[
@@ -89,11 +89,11 @@ def main():
         clustering_coeff = np.mean(list(clustering_coeff.values()))
 
     chordless_cycle_basis = nx.chordless_cycles(target)
-    print(target.edges())
+    print(list(chordless_cycle_basis))
     # Get largest chordless cycle length
-    if len(list(chordless_cycle_basis)) > 0:
-        max_cycle_length = max(len(cycle) for cycle in chordless_cycle_basis)
-    else:
+    try:
+        max_cycle_length = max(len(cycle) for cycle in nx.chordless_cycles(target))
+    except:
         max_cycle_length = 0
      
     # Get self assembly probability
@@ -102,11 +102,11 @@ def main():
     else:
         initial_graph = nx.Graph()
         initial_graph.add_nodes_from(np.arange(N))
-        for k in range(2,100):
-            p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=k,max_edges=True,rewire_est=False)
-            if len(p) > 1:
-                break
-
+        #for k in range(2,100):
+        #    p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=k,max_edges=True,rewire_est=False)
+        #    if len(p) > 1:
+        #        break
+        p, samples, idx, success = at.prob_dist(X, O, capacity, initial_graph=initial_graph, max_iters=10, max_edges=True,rewire_est=True)
         if len(p) == 1:
             if nx.is_isomorphic(target, samples[0]):
                 sa_p = 1
@@ -149,7 +149,7 @@ def main():
                 np.nan,
                 np.nan]
         # Append the stats to the dataframe
-        df.iloc[len(df)] = stats
+        df.loc[len(df)] = stats
         # Save the dataframe to the output file
         df.to_csv(args.output, index=False)
     else:
@@ -173,7 +173,7 @@ def main():
                      T.Tree.all_nodes()]
             
             # Append the stats to the dataframe
-            df.iloc[len(df)] = stats
+            df.loc[len(df)] = stats
             # Save the dataframe to the output file
             df.to_csv(args.output, index=False)
 
