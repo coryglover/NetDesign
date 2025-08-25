@@ -173,7 +173,7 @@ def main():
                      np.sum(T.Tree.get_node(0).data.p),
                      T.Tree.depth(),
                      len(T.Tree.leaves()),
-                     T.Tree.all_nodes()]
+                     len(T.Tree.all_nodes())]
             
             # Append the stats to the dataframe
             df.loc[len(df)] = stats
