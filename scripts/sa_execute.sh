@@ -5,10 +5,12 @@
 #SBATCH --mem=4GB
 #SBATCH --time=2:00:00
 #SBATCH --job-name=SA_cir
+#SBATCH --time=20:00:00
+#SBATCH --job-name=DF_cir
 #SBATCH --partition=short
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
-SBATCH --array=1-886%1 
+#SBATCH --array=1-886%1 
 
 set -x
 
@@ -23,16 +25,16 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-# PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/analysis_params.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/analysis_params.txt)
 
 
-# sleep 1
-# echo "${PARAMS}"
-# sleep 1
-# echo "${SLURM_ARRAY_TASK_ID}"
+sleep 1
+echo "${PARAMS}"
+sleep 1
+echo "${SLURM_ARRAY_TASK_ID}"
 # Run mcmc script with parameters
-# set -- $PARAMS
-python /projects/ccnr/glover.co/net_design/NetDesign/scripts/self_assembly.py --param_file /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/analysis_params.txt --output /scratch/glover.co/NetDesign/data/circuits/stats/self_assembly.txt
+set -- $PARAMS
+python /projects/ccnr/glover.co/net_design/NetDesign/scripts/self_assembly.py "$@"
 #python /projects/ccnr/glover.co/net_design/NetDesign/scripts/max_diversity.py
-# sleep 1
-# echo "job ${SLURM_ARRAY_TASK_ID} complete"
+sleep 1
+echo "job ${SLURM_ARRAY_TASK_ID} complete"
