@@ -192,12 +192,19 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
 
     # Add constraint to ensure the new solution differs from old_sol
     if old_sol is not None:
-        diff_constraint = np.ones((1, pos_edges))
-        diff_constraint[0, :] = old_sol
-        constraint_mat = np.vstack([constraint_mat, diff_constraint])
-        b_l = np.hstack([np.zeros(constraint_mat.shape[0] - 1), [0]])  # Ensure at least one difference
-        b_u0 = np.hstack((X[nodes,:]@capacity - np.array([initial_graph.degree[i] for i in nodes]),(X[nodes,:]@O - nx.adjacency_matrix(initial_graph).todense()@X[nodes,:]).flatten()))
-        b_u = np.hstack([b_u0, [np.sum(old_sol)-1]])  # Upper bound allows overlap
+        b_u = np.hstack((X[nodes,:]@capacity - np.array([initial_graph.degree[i] for i in nodes]),(X[nodes,:]@O - nx.adjacency_matrix(initial_graph).todense()@X[nodes,:]).flatten()))
+  # Ensure at least one difference
+        for sol in old_sol:
+            diff_constraint = np.ones((1, pos_edges))
+            diff_constraint[0, :] = sol
+            constraint_mat = np.vstack([constraint_mat, diff_constraint])
+            # edge_constraint = np.ones((1, pos_edges))
+            # edge_constraint[0, :] = np.ones((1, pos_edges))
+            # constraint_mat = np.vstack([constraint_mat, edge_constraint])
+            b_l = np.hstack([np.zeros(constraint_mat.shape[0] - 1), [np.sum(sol)-1]]) #, [np.sum(sol)]])
+            b_u0 = b_u
+            b_u = np.hstack([b_u0, [np.sum(sol)-1]]) #, [np.sum(sol)]])
+              # Upper bound allows overlap
     else:
         b_l = np.zeros(constraint_mat.shape[0])
         b_u = np.hstack((X[nodes,:]@capacity - np.array([initial_graph.degree[i] for i in nodes]),(X[nodes,:]@O - nx.adjacency_matrix(initial_graph).todense()@X[nodes,:]).flatten()))
@@ -207,9 +214,7 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
     # Create the linear constraint
     constraints = LinearConstraint(constraint_mat, b_l, b_u)
     # Solve the linear programming problem
-    print('start milp')
     res = milp(c=c, constraints=constraints, integrality=integrality, bounds=(0,1), options={'disp':disp, 'time_limit': 120})
-    print(res.success)
     if res.success:
         if solution:
             if ret_edges:
@@ -253,12 +258,35 @@ def self_assembly(X,O,capacity,initial_graph):
     sol, edges = find_optimal_edge_count(X, O, capacity, initial_graph=initial_graph, solution=True, ret_edges=True)
     if sol is None:
         return False
+    solutions = [sol]
+    edge_lists = [edges]
     # Check whether another solution exists
-    new_sol, new_edges = find_optimal_edge_count(X, O, capacity, old_sol=sol, initial_graph=initial_graph, solution=True, ret_edges=True)
-    if new_sol is None:
+    new_sol = True
+    while new_sol is not None:
+        new_sol, new_edges = find_optimal_edge_count(X, O, capacity, old_sol=solutions, initial_graph=initial_graph, solution=True, ret_edges=True)
+        # Check whether new_sol has right amount of edges
+        solutions.append(new_sol)
+        edge_lists.append(new_edges)
+    if len(solutions) == 1:
         return True
     else:
-        return False
+        # Keep on correct length edge_lists
+        E = len(edge_lists[0])
+        edge_lists = [e for e in edge_lists if e is not None and len(e) == E]
+        if len(edge_lists) == 1:
+            return True
+        else:
+            for i in range(len(edge_lists)):
+                for j in range(i+1, len(edge_lists)):
+                    g = nx.Graph()
+                    g.add_nodes_from(initial_graph.nodes())
+                    g.add_edges_from(edge_lists[i])
+                    h = nx.Graph()
+                    h.add_nodes_from(initial_graph.nodes())
+                    h.add_edges_from(edge_lists[j])
+                    if not nx.is_isomorphic(g,h):
+                        return False
+            return True
     
 def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     """
