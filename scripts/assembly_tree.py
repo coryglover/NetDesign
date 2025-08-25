@@ -268,19 +268,18 @@ def self_assembly(X,O,capacity,initial_graph):
         if len(new_edges) < len(edge_lists[0]):
             break
 
-        solutions.append(new_sol)
-        edge_lists.append(new_edges)
+        g = nx.Graph()
+        g.add_nodes_from(initial_graph.nodes())
+        g.add_edges_from(new_edges)
         # Check whether isomorphic
         for i in range(len(edge_lists)):
-            for j in range(i+1, len(edge_lists)):
-                g = nx.Graph()
-                g.add_nodes_from(initial_graph.nodes())
-                g.add_edges_from(edge_lists[i])
-                h = nx.Graph()
-                h.add_nodes_from(initial_graph.nodes())
-                h.add_edges_from(edge_lists[j])
-                if not nx.is_isomorphic(g,h):
-                    return False
+            h = nx.Graph()
+            h.add_nodes_from(initial_graph.nodes())
+            h.add_edges_from(edge_lists[i])
+            if not nx.is_isomorphic(g,h):
+                return False
+        solutions.append(new_sol)
+        edge_lists.append(new_edges)
     return True
     
 def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
