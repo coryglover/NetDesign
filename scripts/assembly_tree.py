@@ -201,7 +201,7 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
             # edge_constraint = np.ones((1, pos_edges))
             # edge_constraint[0, :] = np.ones((1, pos_edges))
             # constraint_mat = np.vstack([constraint_mat, edge_constraint])
-            b_l = np.hstack([np.zeros(constraint_mat.shape[0] - 1), [np.sum(sol)-1]]) #, [np.sum(sol)]])
+            b_l = np.hstack([np.zeros(constraint_mat.shape[0] - 1), [0]]) #, [np.sum(sol)]])
             b_u0 = b_u
             b_u = np.hstack([b_u0, [np.sum(sol)-1]]) #, [np.sum(sol)]])
               # Upper bound allows overlap
@@ -265,6 +265,8 @@ def self_assembly(X,O,capacity,initial_graph):
     while new_sol is not None:
         new_sol, new_edges = find_optimal_edge_count(X, O, capacity, old_sol=solutions, initial_graph=initial_graph, solution=True, ret_edges=True)
         # Check whether new_sol has right amount of edges
+        if len(new_edges) < len(edge_lists[0]):
+            break
         solutions.append(new_sol)
         edge_lists.append(new_edges)
     if len(solutions) == 1:
