@@ -3,9 +3,9 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
-#SBATCH --time=2-00:00:00
-#SBATCH --job-name=DF_cir
-#SBATCH --partition=long
+#SBATCH --time=2:00:00
+#SBATCH --job-name=SA_cir
+#SBATCH --partition=short
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
 SBATCH --array=1-886%1 

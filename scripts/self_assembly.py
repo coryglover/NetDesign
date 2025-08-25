@@ -26,7 +26,7 @@ def main():
     X_files = [line.split('--X_file ')[1].split(' --')[0] for line in lines]
     O_file = [line.split('--O_file ')[1].split(' --')[0] if '--O_file' in line else None for line in lines]
     c_file = [line.split('--c_file ')[1].split(' --')[0] if '--c_file' in line else None for line in lines]
-
+    
     sa_p = np.zeros(len(graph_files))
     for i in range(len(graph_files)):
 
@@ -57,3 +57,5 @@ def main():
     
     np.savetxt(args.output, sa_p)
 
+if __name__ == "__main__":
+    main()
