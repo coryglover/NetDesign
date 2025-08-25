@@ -49,7 +49,11 @@ def main():
 
 
     # Add value to next line of file
-    with open(args.output, 'a') as f:
+    # Make new output file
+    output_path = args.output.split('/')[:-1]
+    output_path = '/'.join(output_path)
+    output = f'{output_path}/self_assembly.txt'
+    with open(output, 'a') as f:
         f.write(f"{self_assembly}\n")
 
 if __name__ == '__main__':

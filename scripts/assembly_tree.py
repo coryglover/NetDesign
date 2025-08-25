@@ -267,28 +267,21 @@ def self_assembly(X,O,capacity,initial_graph):
         # Check whether new_sol has right amount of edges
         if len(new_edges) < len(edge_lists[0]):
             break
+
         solutions.append(new_sol)
         edge_lists.append(new_edges)
-    if len(solutions) == 1:
-        return True
-    else:
-        # Keep on correct length edge_lists
-        E = len(edge_lists[0])
-        edge_lists = [e for e in edge_lists if e is not None and len(e) == E]
-        if len(edge_lists) == 1:
-            return True
-        else:
-            for i in range(len(edge_lists)):
-                for j in range(i+1, len(edge_lists)):
-                    g = nx.Graph()
-                    g.add_nodes_from(initial_graph.nodes())
-                    g.add_edges_from(edge_lists[i])
-                    h = nx.Graph()
-                    h.add_nodes_from(initial_graph.nodes())
-                    h.add_edges_from(edge_lists[j])
-                    if not nx.is_isomorphic(g,h):
-                        return False
-            return True
+        # Check whether isomorphic
+        for i in range(len(edge_lists)):
+            for j in range(i+1, len(edge_lists)):
+                g = nx.Graph()
+                g.add_nodes_from(initial_graph.nodes())
+                g.add_edges_from(edge_lists[i])
+                h = nx.Graph()
+                h.add_nodes_from(initial_graph.nodes())
+                h.add_edges_from(edge_lists[j])
+                if not nx.is_isomorphic(g,h):
+                    return False
+    return True
     
 def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     """
