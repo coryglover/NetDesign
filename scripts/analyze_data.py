@@ -128,9 +128,10 @@ def main():
             tree_data = json.load(f)
         for tree_dict in tree_data:
             T = mcmc.AssemblyTree(target, X, O, capacity, multiedge=False)
-            T = T.load_tree(tree_dict, T)
+            T = at.load_tree(tree_dict, T, prob_file=f'{args.tree_file[:-5]}_stats.txt')
             trees.append(T)
-    except:
+    except Exception as e:
+        print(e)
         trees = []
 
     if len(trees) == 0:
@@ -170,7 +171,7 @@ def main():
                      max_cycle_length,
                      sa_p,
                      i,
-                     np.sum(T.Tree.get_node(0).data.p),
+                     T.Tree.get_node(0).data.p,
                      T.Tree.depth(),
                      len(T.Tree.leaves()),
                      len(T.Tree.all_nodes())]

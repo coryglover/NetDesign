@@ -3,9 +3,9 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
-#SBATCH --time=5-00:00:00
-#SBATCH --job-name=Prot1
-#SBATCH --partition=long
+#SBATCH --time=7-00:00:00
+#SBATCH --job-name=Rob
+#SBATCH --partition=netsi_largemem
 #SBATCH --output=/scratch/glover.co/NetDesign/out/mcmc_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/mcmc_%A_%a.log
 #SBATCH --array=1-1000%10
@@ -23,7 +23,7 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/proteins/mcmc_params_1.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/robots/mcmc_params.txt)
 
 
 sleep 1

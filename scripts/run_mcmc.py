@@ -42,6 +42,8 @@ def main():
     target = nx.read_edgelist(args.graph_file, nodetype=int)
     # Read in X matrix
     X = np.loadtxt(args.X_file, delimiter=' ')
+    if X.ndim == 1:
+        X = X.reshape(len(X),1)
     # Find O matrix
     #O = at.extract_O(target, X)
     # Get capacity vector
@@ -64,7 +66,7 @@ def main():
         multiedge = True
     # Initialize first assembly tree
     # CHeck whether current last tree exists
-    if os.path.exists(os.path.join(args.output, f"not_{graph_name}_tree.json")):
+    if os.path.exists(os.path.join(args.output, f"{graph_name}_tree.json")):
         print(f"Last tree already exists in {args.output}")
         # Initialize assembly tree from last tree
         # Load json
@@ -90,16 +92,20 @@ def main():
         output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
         with open(output_tree_file, 'w') as f:
             json.dump(best_trees_dicts, f, indent=4)
-        stats = np.zeros((1,3))
-        stats[:,0] = 1.0
-        stats[:,1] = initial_tree.Tree.depth()
-        stats[:,2] = time.time() - start
-        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+        stats = np.zeros((1,5))
+        stats[:,0] = 0
+        stats[:,1] = 1
+        stats[:,2] = 0
+        stats[:,3] = 1
+        stats[:,4] = 1
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
         print("Saved trivial example in run_mcmc.py")
         return
     # Run MCMC to find best assembly tree
     print('Run_mcmc before Design MCMC object creation')
     # Check whether tree can be designed
+    initial_graph = nx.Graph()
+    initial_graph.add_nodes_from(np.arange(X.shape[0]))
     _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=None,solution=False,disp=False,ret_edges=True)
     max_edges = len(opt_edges)
 
@@ -114,11 +120,14 @@ def main():
         output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
         with open(output_tree_file, 'w') as f:
             json.dump(best_trees_dicts, f, indent=4)
-        stats = np.zeros((1,3))
-        stats[:,0] = 1.0
-        stats[:,1] = initial_tree.Tree.depth()
-        stats[:,2] = time.time() - start
-        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+        num = 0
+        p = initial_tree.Tree.get_node(0).data.p,
+        depth = initial_tree.Tree.depth(),
+        num_leaves = len(intial_tree.Tree.leaves()),
+        num_nodes = len(initial_tree.Tree.all_nodes())
+        stats = np.zeros((1,5))
+        stats[0] = [num, p, depth, num_leaves, num_nodes]
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
         print("Saved impossible example in run_mcmc.py")
         return
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
@@ -150,6 +159,8 @@ def main():
 # Get depths of best performing trees
         # Get depths of best performing trees
         depths = [samples.Tree.depth() for samples in best_samples]
+        num_leaves = [len(samples.Tree.leaves()) for samples in best_samples]
+        num_nodes = [len(samples.Tree.all_nodes()) for samples in best_samples]
         # Get minimal depth
         min_depth = min(depths)
 
@@ -201,13 +212,15 @@ def main():
             stats[:,1] = min_depth
             stats[:,2] = time.time() - start
         else:
-            stats = np.zeros((len(unique_trees),3))
-            stats[:,0] = np.full(len(unique_trees),np.exp(mcmc_obj.best_logp))
-            stats[:,1] = depths
-            stats[:,2] = np.full(len(unique_trees),time.time() - start)
+            stats = np.zeros((len(unique_trees),5))
+            stats[:,0] = np.arange(len(unique_trees))
+            stats[:,1] = np.full(len(unique_trees),np.exp(mcmc_obj.best_logp))
+            stats[:,2] = depths
+            stats[:,3] = num_leaves
+            stats[:,4] = num_nodes
 
             
-        np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+        np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
         if np.exp(mcmc_obj.best_logp) == 1:
             print('Found perfect tree, stopping MCMC')
             break
@@ -225,6 +238,8 @@ def main():
 
     # Get depths of best performing trees
     depths = [samples.Tree.depth() for samples in best_samples]
+    num_leaves = [len(samples.Tree.leaves()) for samples in best_samples]
+    num_nodes = [len(samples.Tree.all_nodes()) for samples in best_samples]
     # Get minimal depth
     min_depth = min(depths)
     # Get trees with minimal depth
@@ -261,13 +276,15 @@ def main():
         stats[:,1] = min_depth
         stats[:,2] = time.time() - start
     else:
-        stats = np.zeros((len(unique_trees),3))
-        stats[:,0] = np.full(len(unique_trees),np.exp(mcmc_obj.best_logp))
-        stats[:,1] = depths
-        stats[:,2] = np.full(len(unique_trees),time.time() - start)
+        stats = np.zeros((len(unique_trees),5))
+        stats[:,0] = np.arange(len(unique_trees))
+        stats[:,1] = np.full(len(unique_trees),np.exp(mcmc_obj.best_logp))
+        stats[:,2] = depths
+        stats[:,3] = num_leaves
+        stats[:,4] = num_nodes
 
-        
-    np.savetxt(output_tree_stats_file, stats, delimiter=',', header='p,depth,time', comments='')
+
+    np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
 
 if __name__ == "__main__":
     print('Entered run_mcmc.py')

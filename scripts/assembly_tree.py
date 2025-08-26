@@ -19,7 +19,7 @@ import random
 import time
 import mcmc
 
-def load_tree(f,tree,parent=None):
+def load_tree(f,tree,parent=None,prob_file=None):
     nodes_to_add = list(f.keys())
     if 'success' in nodes_to_add:
         nodes_to_add.remove('success')        
@@ -32,7 +32,11 @@ def load_tree(f,tree,parent=None):
             children = f[str(node)]['children']
             for child in children:
                 load_tree(child, tree, parent=int(node))
-        tree.update_prob(int(node))
+        if prob_file is None:
+            tree.update_prob(int(node))
+    if prob_file is not None:
+        file_vals = np.loadtxt(prob_file,skiprows=1,delimiter=',')
+        tree.Tree.get_node(0).data.p = file_vals.flatten()[0]
     return tree
 
 def cut_graph(g,pairs):
@@ -157,8 +161,8 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
     # Get number of nodes and possible edges
     if initial_graph is None:
         initial_graph = nx.Graph()
-        initial_graph.add_nodes_from(N)
         N = X.shape[0]    
+        initial_graph.add_nodes_from(np.arange(N))
     nodes = list(initial_graph.nodes())
     N = len(nodes)
     pos_edges = N*(N-1) // 2
