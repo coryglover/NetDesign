@@ -1,8 +1,8 @@
 import assembly_tree as at
 import numpy as np 
-np.random.seed(0)
+#np.random.seed(0)
 import random
-random.seed(0)
+#random.seed(0)
 import sympy
 from scipy.special import stirling2
 import networkx as nx

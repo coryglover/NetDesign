@@ -75,7 +75,7 @@ def main():
         if type(last_tree) == list:
             last_tree = last_tree[0]
         initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
-        initial_tree = at.create_tree_from_json(last_tree, initial_tree)
+        initial_tree = at.load_tree(last_tree, initial_tree)
     else:    
         print("Create assembly tree object in run_mcmc.py if does not exist")
         initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
