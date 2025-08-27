@@ -4,11 +4,11 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
 #SBATCH --time=12:00:00
-#SBATCH --job-name=DF_mol
+#SBATCH --job-name=DF_prot
 #SBATCH --partition=short
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
-#SBATCH --array=1-144%1 
+#SBATCH --array=1-619%1
 
 set -x
 
@@ -23,7 +23,7 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/molecules/analysis_params.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/proteins/analysis_params.txt)
 
 
 sleep 1

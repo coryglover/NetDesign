@@ -122,18 +122,16 @@ def main():
     subdir = args.graph_file.split('/')[6]
 
     # Try to load tree
-    trees = []
+    tree_data = []
     try:
-        with open(args.tree_file, 'r') as f:
-            tree_data = json.load(f)
-        for tree_dict in tree_data:
-            T = mcmc.AssemblyTree(target, X, O, capacity, multiedge=False)
-            T = T.load_tree(tree_dict, T)
-            trees.append(T)
-    except:
-        trees = []
+        tree_data = np.loadtxt(f'{args.tree_file[:-5]}_stats.txt',delimiter=',')
+        if tree_data.ndim == 1:
+            tree_data = tree_data.reshape(1,5)
+    except Exception as e:
+        print(e)
+        tree_data = []
 
-    if len(trees) == 0:
+    if len(tree_data) == 0:
         stats = [name,
                  subdir,
                 N,
@@ -156,7 +154,7 @@ def main():
         # Save the dataframe to the output file
         df.to_csv(args.output, index=False)
     else:
-        for i, T in enumerate(trees):
+        for i in range(len(tree_data)):
             stats = [name,
                      subdir,
                      N,
@@ -169,11 +167,11 @@ def main():
                      clustering_coeff,
                      max_cycle_length,
                      sa_p,
-                     i,
-                     np.sum(T.Tree.get_node(0).data.p),
-                     T.Tree.depth(),
-                     len(T.Tree.leaves()),
-                     len(T.Tree.all_nodes())]
+                     tree_data[i,0],
+                     tree_data[i,1],
+                     tree_data[i,2],
+                     tree_data[i,3],
+                     tree_data[i,4]]
             
             # Append the stats to the dataframe
             df.loc[len(df)] = stats
