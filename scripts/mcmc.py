@@ -1,8 +1,8 @@
 import assembly_tree as at
 import numpy as np 
-np.random.seed(0)
+# np.random.seed(0)
 import random
-random.seed(0)
+# random.seed(0)
 import sympy
 from scipy.special import stirling2
 import networkx as nx
@@ -10,6 +10,7 @@ import treelib
 from itertools import product
 import copy
 from tqdm import tqdm
+import time 
 
 def get_integer_partition(n,m=None):
     """Return a uniformly random integer partition of n."""
@@ -117,15 +118,20 @@ class AssemblyTree:
         self.G.add_nodes_from(self.nodes)
         self.Tree.create_node(data=AssemblyNode(self.nodes,self.X,self.O,self.capacity,subgraph=[]),identifier=self.Tree.size())
         self.success = True
-        # self.known_p = {}
-        # self.known_target = {}
+        self.known_p = {}
+        self.known_subgraph = {}        # self.known_target = {}
+        # print(time.time())
         self.update_prob(0)
+        # print(time.time())
         # cur_dist = encode_tree(self.Tree.get_node(0),self,count=False)
         # cur_dist = convert_to_tuple(cur_dist)
         # self.known_p[cur_dist] = self.Tree.get_node(0).data.p
         self.self_assembly_p = copy.deepcopy(self.Tree.get_node(0).data.p)
         self.self_assembly_target = copy.deepcopy(self.Tree.get_node(0).data.subgraph)
-
+        
+        self.known_p[(tuple(sorted(self.G.nodes())),())] = self.self_assembly_p
+        # self.known_subgraph = {}
+        self.known_subgraph[(tuple(sorted(self.G.nodes())),())] = self.self_assembly_target
         # self.known_target[cur_dist] = self.Tree.get_node(0).data.subgraph
         
 
@@ -473,6 +479,11 @@ class AssemblyTree:
             # cur_dist = encode_tree(node,self,count=False)
             # cur_dist = convert_to_tuple(cur_dist)
             # cur_dist = tuple(self.X[sorted(sub_nodes),:].sum(axis=0))
+            cur_idx = (tuple(sorted(sub_nodes)),())
+            if cur_idx in self.known_p:
+                node.data.p = self.known_p[cur_idx]
+                node.data.subgraph = self.known_subgraph[cur_idx]
+                return
             # if cur_dist in self.known_p:
             #     # print('here')
             #     node.data.p = self.known_p[cur_dist]
@@ -550,6 +561,15 @@ class AssemblyTree:
                 initial_graph = nx.Graph()
                 for s in subgraph:
                     initial_graph = nx.compose(initial_graph,s)
+                
+                # Get idx
+                nodes = tuple(sorted(initial_graph.nodes()))
+                edges = tuple(sorted(initial_graph.edges()))
+                # Check whether probability is known
+                if (nodes,edges) in self.known_p:
+                    node.data.p.append(self.known_p[(nodes,edges)][0]*probs[i])
+                    node.data.subgraph.append(self.known_subgraph[(nodes,edges)])
+                    continue
                 # Run simulation
                 p, samples, idx, success = at.prob_dist(self.X,self.O,self.capacity,initial_graph=initial_graph,max_edges=True,max_iters=max_iters,rewire_est=True,multiedge=self.multiedge)
                 p = p / np.sum(p)
@@ -559,12 +579,16 @@ class AssemblyTree:
                     if iso_object.subgraph_is_isomorphic() and p[j] > prob_tol:
                         node.data.p.append(p[j]*probs[i])
                         node.data.subgraph.append(s)
+                        self.known_p[(nodes,edges)] = [p[j]*probs[i]]
+                        self.known_subgraph[(nodes,edges)] = s
                         if success is False:
                             self.success = False
                         break
                     else:
                         node.data.p.append(0)
                         node.data.subgraph.append(s)
+                        self.known_p[(nodes,edges)] = [0]
+                        self.known_subgraph[(nodes,edges)] = s
                         if success is False:
                             self.success = False
         # cur_dist = encode_tree(node,self,count=False)
