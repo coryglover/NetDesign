@@ -72,7 +72,7 @@ def main():
         # Load json
         with open(os.path.join(args.output, f"{graph_name}_tree.json"), 'r') as f:
             tree_list = json.load(f)
-        if type(last_tree) == list:
+        if type(tree_list) == list:
             last_tree = tree_list[0]
         initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
         initial_tree = at.load_tree(last_tree, initial_tree)
