@@ -7,6 +7,7 @@ import mcmc
 import argparse
 import json 
 import copy
+import time
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Analyze graph data and compute assembly trees.')
@@ -37,7 +38,7 @@ def main():
 
     # Load graph
     target = nx.read_edgelist(args.graph_file, nodetype=int, create_using=nx.Graph)
-    print(f"Loaded graph with {target.number_of_nodes()} nodes and {target.number_of_edges()} edges.")
+    # print(f"Loaded graph with {target.number_of_nodes()} nodes and {target.number_of_edges()} edges.")
     # Load labels
     X = np.loadtxt(args.X_file, dtype=int)
     if X.ndim == 1:
@@ -89,7 +90,6 @@ def main():
         clustering_coeff = np.mean(list(clustering_coeff.values()))
 
     chordless_cycle_basis = nx.chordless_cycles(target)
-    print(list(chordless_cycle_basis))
     # Get largest chordless cycle length
     try:
         max_cycle_length = max(len(cycle) for cycle in nx.chordless_cycles(target))
@@ -115,15 +115,15 @@ def main():
     initial_graph = nx.Graph()
     initial_graph.add_nodes_from(np.arange(N))
     #sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
-    #rewire_p = at.prob_dist(X, O, capacity,
-    #                           max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
-    #                           multiedge=False, verbose =False,max_edges = True,
-    #                           rewire_est=True, burn_in=1000,sample=False)
-    #if len(rewire_p[0]) == 1:
-    #    sa_p = True
-    #else:
-    #    sa_p = False
-    sa_p = np.nan
+    rewire_p = at.prob_dist(X, O, capacity,
+                              max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
+                              multiedge=False, verbose =False,max_edges = True,
+                              rewire_est=True, burn_in=100,sample=False)
+    if len(rewire_p[0]) == 1:
+       sa_p = True
+    else:
+       sa_p = False
+    # sa_p = np.nan
     # Get name information
     graph_name = args.graph_file.split('/')[-1]
     name = graph_name.split('.')[0]
@@ -160,6 +160,8 @@ def main():
         # Append the stats to the dataframe
         df.loc[len(df)] = stats
         # Save the dataframe to the output file
+        timestamp = time.strftime("%Y%m%d")
+        output_file = f"{args.output.rsplit('.', 1)[0]}_{timestamp}.csv"
         df.to_csv(args.output, index=False)
     else:
         for i in range(len(tree_data)):
@@ -184,7 +186,9 @@ def main():
             # Append the stats to the dataframe
             df.loc[len(df)] = stats
             # Save the dataframe to the output file
-            df.to_csv(args.output, index=False)
+            timestamp = time.strftime("%Y%m%d")
+            output_file = f"{args.output.rsplit('.', 1)[0]}_{timestamp}.csv"
+            df.to_csv(output_file, index=False)
 
 if __name__ == "__main__":
     main()
