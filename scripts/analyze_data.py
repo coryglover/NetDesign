@@ -114,8 +114,16 @@ def main():
     #         sa_p = 0
     initial_graph = nx.Graph()
     initial_graph.add_nodes_from(np.arange(N))
-    sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
-
+    #sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
+    #rewire_p = at.prob_dist(X, O, capacity,
+    #                           max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
+    #                           multiedge=False, verbose =False,max_edges = True,
+    #                           rewire_est=True, burn_in=1000,sample=False)
+    #if len(rewire_p[0]) == 1:
+    #    sa_p = True
+    #else:
+    #    sa_p = False
+    sa_p = np.nan
     # Get name information
     graph_name = args.graph_file.split('/')[-1]
     name = graph_name.split('.')[0]

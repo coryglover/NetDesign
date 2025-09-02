@@ -121,21 +121,27 @@ def main():
         with open(output_tree_file, 'w') as f:
             json.dump(best_trees_dicts, f, indent=4)
         num = 0
-        p = initial_tree.Tree.get_node(0).data.p,
+        p = 0,
         depth = initial_tree.Tree.depth(),
-        num_leaves = len(intial_tree.Tree.leaves()),
+        num_leaves = len(initial_tree.Tree.leaves()),
         num_nodes = len(initial_tree.Tree.all_nodes())
+        #stats = np.array([num, p, depth, num_leaves, num_nodes])
         stats = np.zeros((1,5))
-        stats[0] = [num, p, depth, num_leaves, num_nodes]
+        stats[0,0] = num
+        stats[0,1] = 0
+        stats[0,2] = 0
+        stats[0,3] = 1
+        stats[0,4] = 1
         np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
         print("Saved impossible example in run_mcmc.py")
         return
     mcmc_obj = mcmc.DesignMCMC(initial_tree)
     print('Run_mcmc after DesignMCMC object creation')
-    time_int = args.num_samples // 100
+    ratio = args.num_samples // 10
+    time_int = args.num_samples // ratio
     #Tis = np.linspace(10,25,args.num_samples)[::-1]
     Tis = np.ones(args.num_samples)
-    for i in range(100):
+    for i in range(ratio):
         print('Run mcmc before running object')
         mcmc_obj.run_mcmc(time_int,Tis[time_int*i:time_int*(i+1)],dist=[.25,.25,0,0,.25,.25])
         print(f'Run mcmc after running object {i}')
