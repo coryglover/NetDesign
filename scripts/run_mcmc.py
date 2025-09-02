@@ -128,7 +128,7 @@ def main():
     # Check whether tree can be designed
     initial_graph = nx.Graph()
     initial_graph.add_nodes_from(np.arange(X.shape[0]))
-    _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=None,solution=False,disp=False,ret_edges=True)
+    _, opt_edges = at.find_optimal_edge_count(X, O, capacity, initial_graph=initial_graph,solution=False,disp=False,ret_edges=True)
     max_edges = len(opt_edges)
 
     if max_edges != target.number_of_edges():
