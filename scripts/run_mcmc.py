@@ -71,11 +71,33 @@ def main():
         # Initialize assembly tree from last tree
         # Load json
         with open(os.path.join(args.output, f"{graph_name}_tree.json"), 'r') as f:
-            last_tree = json.load(f)
+            tree_list = json.load(f)
         if type(last_tree) == list:
-            last_tree = last_tree[0]
+            last_tree = tree_list[0]
         initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
         initial_tree = at.load_tree(last_tree, initial_tree)
+        # Check whether probability is 1
+        if max(initial_tree.Tree.get_node(0).data.p) == 1.0:
+            trees = []
+            for i in range(len(tree_list)):
+                tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
+                tree = at.load_tree(tree_list[i], tree)
+                trees.append(tree)
+            best_trees_dicts = [tree.Tree.to_dict(with_data=True) for tree in trees]
+            for i, tree in enumerate(best_trees_dicts):
+                best_trees_dicts[i] = mcmc.expand_tree(tree)
+                best_trees_dicts[i]['success'] = 1
+            # output_tree_file = os.path.join(args.output, f"{graph_name}_tree.json")
+            output_tree_stats_file = os.path.join(args.output, f"{graph_name}_tree_stats.txt")
+            stats = np.zeros((len(best_trees_dicts),5))
+            for i, tree in enumerate(trees):
+                stats[i,0] = i
+                stats[i,1] = 1
+                stats[i,2] = tree.Tree.depth()
+                stats[i,3] = len(tree.Tree.leaves())
+                stats[i,4] = len(tree.Tree.all_nodes())
+            np.savetxt(output_tree_stats_file, stats, delimiter=',', comments='')
+            return
     else:    
         print("Create assembly tree object in run_mcmc.py if does not exist")
         initial_tree = mcmc.AssemblyTree(target, X, O, capacity, multiedge=multiedge)
