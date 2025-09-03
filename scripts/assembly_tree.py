@@ -19,7 +19,7 @@ import random
 import time
 import mcmc
 
-def load_tree(f,tree,parent=None):
+def load_tree(f,tree,parent=None,prob_file=None):
     nodes_to_add = list(f.keys())
     if 'success' in nodes_to_add:
         nodes_to_add.remove('success')        
@@ -32,7 +32,11 @@ def load_tree(f,tree,parent=None):
             children = f[str(node)]['children']
             for child in children:
                 load_tree(child, tree, parent=int(node))
-        tree.update_prob(int(node))
+        if prob_file is None:
+            tree.update_prob(int(node))
+    if prob_file is not None:
+        file_vals = np.loadtxt(prob_file,skiprows=1,delimiter=',')
+        tree.Tree.get_node(0).data.p = file_vals.flatten()[0]
     return tree
 
 def cut_graph(g,pairs):
@@ -157,8 +161,8 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
     # Get number of nodes and possible edges
     if initial_graph is None:
         initial_graph = nx.Graph()
-        initial_graph.add_nodes_from(N)
         N = X.shape[0]    
+        initial_graph.add_nodes_from(np.arange(N))
     nodes = list(initial_graph.nodes())
     N = len(nodes)
     pos_edges = N*(N-1) // 2
@@ -243,7 +247,52 @@ def find_optimal_edge_count(X, O, capacity, old_sol=None, initial_graph=None, so
             return None, None
         return None
 
-def self_assembly(X,O,capacity,initial_graph):
+def milp_rewire(X,O,capacity,initial_graph):
+    """
+    Rewire a graph using MILP to find a new valid configuration.
+    
+    Parameters:
+        X (ndarray): Matrix of node labels.
+        O (ndarray): Binding matrix.
+        capacity (ndarray): Capacity vector.
+        initial_graph (networkx.Graph): Initial graph.
+    Returns:
+        networkx.Graph: Rewired graph if successful, None otherwise.
+    """
+    sol, edges = find_optimal_edge_count(X, O, capacity, initial_graph=initial_graph, solution=True, ret_edges=True)
+    solutions =[sol]
+    g = nx.Graph()
+    g.add_nodes_from(np.arange(X.shape[0]))
+    g.add_edges_from(edges)
+    graphs = [g]
+    counts = [1]
+
+    new_sol = True
+    E = len(edges)
+    while new_sol is not None:
+        new_sol, new_edges = find_optimal_edge_count(X, O, capacity, old_sol=solutions, initial_graph=initial_graph, solution=True, ret_edges=True)
+        if new_sol is None:
+            break
+        if len(new_edges) < E:
+            break
+        g = nx.Graph()
+        g.add_nodes_from(initial_graph.nodes())
+        g.add_edges_from(new_edges)
+        # Check whether isomorphic
+        isomorphic = False
+        for i, h in enumerate(graphs):
+            if nx.is_isomorphic(g,h):
+                counts[i] += 1
+                isomorphic = True
+        if isomorphic:
+            solutions.append(new_sol)
+            graphs.append(g)
+            counts.append(1)
+    return counts, graphs
+            
+    
+
+def self_assembly(X,O,capacity,initial_graph,target = None):
     """
     Determine whether network can self-assemble.
     
@@ -280,9 +329,12 @@ def self_assembly(X,O,capacity,initial_graph):
                 return False
         solutions.append(new_sol)
         edge_lists.append(new_edges)
+    if target is not None:
+        if sorted(list(target.edges()) != sorted(list(edge_lists[0]))):
+            return False
     return True
     
-def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
+def rewire(g,X,O,capacity,T,burn_in=1000,fixed_edges=None,sample=False):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
@@ -357,6 +409,8 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
         nodes = list(g.nodes())
         node_capacity_per_type = X @ O
         node_capacity = X @ capacity[:,np.newaxis]
+        A = nx.adjacency_matrix(g).todense()
+        cur_connections = A @ X
         edges = list(g.edges())
         # Remove fixed edges from edge list
         if fixed_edges is not None:
@@ -369,6 +423,8 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
         for _ in range(burn_in):
             # Randomly select edge to rewire
             edges = list(g.edges())
+            A = nx.adjacency_matrix(g).todense()
+            cur_connections = A @ X
             if fixed_edges is not None:
                 available_edges = [e for e in edges if e not in fixed_edges and e[::-1] not in fixed_edges]
             else:
@@ -397,11 +453,13 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     continue
                 # Check whether swap is compatible
                 if node_capacity_per_type[v1, t3] > 0 and node_capacity_per_type[v2, t4] > 0 and node_capacity_per_type[v3, t1] > 0 and node_capacity_per_type[v4, t2] > 0:
-                    # Remove old edge and add new edge
-                    g.remove_edge(v1, v2)
-                    g.remove_edge(v3, v4)
-                    g.add_edge(v1, v3)
-                    g.add_edge(v2, v4)
+                    # Check wheter no nodes are at capacity of connection
+                    if (t2 == t3 and t1 == t4) or (cur_connections[v1,t3] < node_capacity_per_type[v1,t3] and cur_connections[v2,t4] < node_capacity_per_type[v2,t4] and cur_connections[v3,t1] < node_capacity_per_type[v3,t1] and cur_connections[v4,t2] < node_capacity_per_type[v4,t2]):
+                        # Remove old edge and add new edge
+                        g.remove_edge(v1, v2)
+                        g.remove_edge(v3, v4)
+                        g.add_edge(v1, v3)
+                        g.add_edge(v2, v4)
                     
                     # Update available edges
                     # if (v1,v2) in available_edges:
@@ -422,7 +480,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v2, v4):
                         continue
                     # Check whether v4 can connect to v2 
-                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t2] == 0:
+                    if g.degree(v4) == node_capacity[v4] or node_capacity[v4, t2] == 0:
                         continue
                     else:
                         # Check whether v4 is of type t1
@@ -437,7 +495,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v2, v4))
                         else:
                             # Check whether v2 can connect to v4
-                            if node_capacity_per_type[v2,t4] > 0:
+                            if node_capacity_per_type[v2,t4] > 0 and cur_connections[v2,t4] < node_capacity_per_type[v2,t4]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v2, v4)
                                 # Update available edges
@@ -450,7 +508,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v1, v4):
                         continue
                     # Check whether v4 can connect to v1 
-                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t1] == 0:
+                    if g.degree(v4) == node_capacity[v4] or node_capacity[v4, t1] == 0:
                         continue
                     else:
                         # Check whether v4 is of type t2
@@ -465,7 +523,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v1, v4))
                         else:
                             # Check whether v1 can connect to v4
-                            if node_capacity_per_type[v1,t4] > 0:
+                            if node_capacity_per_type[v1,t4] > 0 and cur_connections[v1,t4] < node_capacity_per_type[v1,t4]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v1, v4)
                                 # Update available edges
@@ -480,7 +538,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v2, v3):
                         continue
                     # Check whether v3 can connect to v2 
-                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t2] == 0:
+                    if g.degree(v3) == node_capacity[v3] or node_capacity[v3, t2] == 0:
                         continue
                     else:
                         # Check whether v3 is of type t1
@@ -495,7 +553,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v2, v3))
                         else:
                             # Check whether v2 can connect to v3
-                            if node_capacity_per_type[v2,t3] > 0:
+                            if node_capacity_per_type[v2,t3] > 0 and cur_connections[v2,t3] < node_capacity_per_type[v2,t3]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v2, v3)
                                 # Update available edges
@@ -509,7 +567,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v1, v3):
                         continue
                     # Check whether v3 can connect to v1 
-                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t1] == 0:
+                    if g.degree(v3) == node_capacity[v3] or node_capacity[v3, t1] == 0:
                         continue
                     else:
                         # Check whether v3 is of type t2
@@ -524,7 +582,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v1, v3))
                         else:
                             # Check whether v1 can connect to v3
-                            if node_capacity_per_type[v1,t3] > 0:
+                            if node_capacity_per_type[v1,t3] > 0 and cur_connections[v1,t3] < node_capacity_per_type[v1,t3]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v1, v3)
                                 # Update available edges
@@ -543,7 +601,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             if g.degree(n2) == node_capacity[n2]:
                                 continue
                             else:
-                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0:
+                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0 and cur_connections[n2, X[n1].argmax()] < node_capacity_per_type[n2, X[n1].argmax()] and cur_connections[n1, X[n2].argmax()] < node_capacity_per_type[n1, X[n2].argmax()]:
                                     if not g.has_edge(n1, n2):
                                         # Only add edge if it is not already present
                                         pos_edges.append((n1,n2))
@@ -562,6 +620,8 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
         for _ in range(T):
             # Randomly select edge to rewire
             edges = list(g.edges())
+            A = nx.adjacency_matrix(g).todense()
+            cur_connections = A @ X
             if fixed_edges is not None:
                 available_edges = [e for e in edges if e not in fixed_edges and e[::-1] not in fixed_edges]
             else:
@@ -590,11 +650,13 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     continue
                 # Check whether swap is compatible
                 if node_capacity_per_type[v1, t3] > 0 and node_capacity_per_type[v2, t4] > 0 and node_capacity_per_type[v3, t1] > 0 and node_capacity_per_type[v4, t2] > 0:
-                    # Remove old edge and add new edge
-                    g.remove_edge(v1, v2)
-                    g.remove_edge(v3, v4)
-                    g.add_edge(v1, v3)
-                    g.add_edge(v2, v4)
+                    # Check wheter no nodes are at capacity of connection
+                    if (t2 == t3 and t1 == t4) or (cur_connections[v1,t3] < node_capacity_per_type[v1,t3] and cur_connections[v2,t4] < node_capacity_per_type[v2,t4] and cur_connections[v3,t1] < node_capacity_per_type[v3,t1] and cur_connections[v4,t2] < node_capacity_per_type[v4,t2]):
+                        # Remove old edge and add new edge
+                        g.remove_edge(v1, v2)
+                        g.remove_edge(v3, v4)
+                        g.add_edge(v1, v3)
+                        g.add_edge(v2, v4)
                     
                     # Update available edges
                     # if (v1,v2) in available_edges:
@@ -615,7 +677,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v2, v4):
                         continue
                     # Check whether v4 can connect to v2 
-                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t2] == 0:
+                    if g.degree(v4) == node_capacity[v4] or node_capacity[v4, t2] == 0:
                         continue
                     else:
                         # Check whether v4 is of type t1
@@ -630,7 +692,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v2, v4))
                         else:
                             # Check whether v2 can connect to v4
-                            if node_capacity_per_type[v2,t4] > 0:
+                            if node_capacity_per_type[v2,t4] > 0 and cur_connections[v2,t4] < node_capacity_per_type[v2,t4]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v2, v4)
                                 # Update available edges
@@ -643,7 +705,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v1, v4):
                         continue
                     # Check whether v4 can connect to v1 
-                    if g.degree(v4) == node_capacity[v4] or node_capacity_per_type[v4, t1] == 0:
+                    if g.degree(v4) == node_capacity[v4] or node_capacity[v4, t1] == 0:
                         continue
                     else:
                         # Check whether v4 is of type t2
@@ -658,7 +720,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v1, v4))
                         else:
                             # Check whether v1 can connect to v4
-                            if node_capacity_per_type[v1,t4] > 0:
+                            if node_capacity_per_type[v1,t4] > 0 and cur_connections[v1,t4] < node_capacity_per_type[v1,t4]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v1, v4)
                                 # Update available edges
@@ -673,7 +735,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v2, v3):
                         continue
                     # Check whether v3 can connect to v2 
-                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t2] == 0:
+                    if g.degree(v3) == node_capacity[v3] or node_capacity[v3, t2] == 0:
                         continue
                     else:
                         # Check whether v3 is of type t1
@@ -688,7 +750,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v2, v3))
                         else:
                             # Check whether v2 can connect to v3
-                            if node_capacity_per_type[v2,t3] > 0:
+                            if node_capacity_per_type[v2,t3] > 0 and cur_connections[v2,t3] < node_capacity_per_type[v2,t3]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v2, v3)
                                 # Update available edges
@@ -702,7 +764,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                     if g.has_edge(v1, v3):
                         continue
                     # Check whether v3 can connect to v1 
-                    if g.degree(v3) == node_capacity[v3] or node_capacity_per_type[v3, t1] == 0:
+                    if g.degree(v3) == node_capacity[v3] or node_capacity[v3, t1] == 0:
                         continue
                     else:
                         # Check whether v3 is of type t2
@@ -717,7 +779,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             # available_edges.append((v1, v3))
                         else:
                             # Check whether v1 can connect to v3
-                            if node_capacity_per_type[v1,t3] > 0:
+                            if node_capacity_per_type[v1,t3] > 0 and cur_connections[v1,t3] < node_capacity_per_type[v1,t3]:
                                 g.remove_edge(v1, v2)
                                 g.add_edge(v1, v3)
                                 # Update available edges
@@ -736,7 +798,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
                             if g.degree(n2) == node_capacity[n2]:
                                 continue
                             else:
-                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0:
+                                if node_capacity_per_type[n2, X[n1].argmax()] > 0 and node_capacity_per_type[n1, X[n2].argmax()] > 0 and cur_connections[n2, X[n1].argmax()] < node_capacity_per_type[n2, X[n1].argmax()] and cur_connections[n1, X[n2].argmax()] < node_capacity_per_type[n1, X[n2].argmax()]:
                                     if not g.has_edge(n1, n2):
                                         # Only add edge if it is not already present
                                         pos_edges.append((n1,n2))
@@ -987,7 +1049,7 @@ def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
     '''
     # return g
 
-def prob_dist(X,O,capacity,max_iters=100,initial_graph=None,multiedge=False,verbose=False,labeled=False,T=1000,max_edges=False, rewire_est=True):
+def prob_dist(X,O,capacity,max_iters=100,initial_graph=None,multiedge=False,verbose=False,burn_in=100,labeled=False,T=1000,sample=True,max_edges=False, rewire_est=True):
     """
     Extract empirical distribution of system.
     
@@ -1023,7 +1085,7 @@ def prob_dist(X,O,capacity,max_iters=100,initial_graph=None,multiedge=False,verb
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,burn_in=burn_in,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()), sample=sample)
                     cur_graphs.append(test_g.copy())
     else:
         for t in range(max_iters):
@@ -1046,7 +1108,7 @@ def prob_dist(X,O,capacity,max_iters=100,initial_graph=None,multiedge=False,verb
                     cur_graphs.append(test_g.copy())
                 else:
                     # cur_graphs.append(test_g.copy())
-                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),fixed_edges=list(initial_graph.edges()))
+                    test_g = rewire(test_g.copy(),X,O,capacity,T=int(2*test_g.number_of_edges()),sample=sample,burn_in=burn_in,fixed_edges=list(initial_graph.edges()))
                     cur_graphs.append(test_g.copy())
     final_graphs = []
     counts = []
@@ -1536,14 +1598,14 @@ if __name__ == '__main__':
     # new_g = microcanonical_ensemble(X,O,capacity)
     # draw_network(new_g,X,with_labels=True)
     # for i in range(10):
-    start = time.time()
+    # start = time.time()
     for i in range(10):
         new_g = rewire(g,X,O,capacity,T=1000,sample=True)
         print(new_g.edges())
-    print('sample',time.time() - start)
-    start = time.time()
+    # print('sample',time.time() - start)
+    # start = time.time()
     for i in range(10):
         new_g = rewire(g,X,O,capacity,T=1000,sample=False)
         print(new_g.edges())
-    print('rewire',time.time() - start)
+    # print('rewire',time.time() - start)
     draw_network(new_g,X,with_labels=True)
