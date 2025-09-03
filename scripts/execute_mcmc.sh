@@ -4,11 +4,11 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
 #SBATCH --time=7-00:00:00
-#SBATCH --job-name=mol
+#SBATCH --job-name=cir
 #SBATCH --partition=long
 #SBATCH --output=/scratch/glover.co/NetDesign/out/mcmc_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/mcmc_%A_%a.log
-#SBATCH --array=1-144%10
+#SBATCH --array=1-886%10
 ##SBATCH --exclude=c3105,c3016,c3107,c3108,c3109,c3110,c3111,c3112,c3113,c3114,c3115,c3116
 set -x
 
@@ -23,7 +23,7 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/molecules/mcmc_params.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/mcmc_params.txt)
 
 
 sleep 1

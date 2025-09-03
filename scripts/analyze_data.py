@@ -118,7 +118,7 @@ def main():
     rewire_p = at.prob_dist(X, O, capacity,
                               max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
                               multiedge=False, verbose =False,max_edges = True,
-                              rewire_est=True, burn_in=100,sample=False)
+                              rewire_est=True,sample=False)
     if len(rewire_p[0]) == 1:
        sa_p = True
     else:

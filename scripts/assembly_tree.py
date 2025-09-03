@@ -282,7 +282,7 @@ def self_assembly(X,O,capacity,initial_graph):
         edge_lists.append(new_edges)
     return True
     
-def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=True):
+def rewire(g,X,O,capacity,T,burn_in=100,fixed_edges=None,sample=False):
     """
     Rewire a graph while respecting the binding matrix and node labels.
     Parameters:
