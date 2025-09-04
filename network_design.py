@@ -7,9 +7,9 @@ from itertools import combinations
 from itertools import product
 import copy
 from scipy.spatial.distance import cdist
-import graph_tool.all as gt
-from numba import jit
-import numba as nb
+#import graph_tool.all as gt
+#from numba import jit
+#import numba as nb
 
 def get_automorphic_groups_nx(graph):
     """

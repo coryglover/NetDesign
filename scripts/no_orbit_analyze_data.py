@@ -100,10 +100,7 @@ def main():
     for i in range(N):
         label = np.argmax(X[i])
         psi_i = O_sum[label] - capacity[label]
-        if capacity[label] == 0 or N_types == 1:
-            psi_i = 1
-        else:
-            psi_i /= (capacity[label]*N_types - capacity[label])
+        psi_i /= (capacity[label]*N_types - capacity[label])
         total_psi += psi_i
     total_psi /= N
     total_psi = 1 - total_psi
@@ -168,16 +165,15 @@ def main():
     elif sa_dict_val == 'NO':
         sa_p = False
     else:
-        sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
-        print(sa_p)
-        #rewire_p = at.prob_dist(X, O, capacity,
-        #                   max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
-        #                      multiedge=False, verbose =False,max_edges = True,
-        #                      rewire_est=True)
-        #if len(rewire_p[0]) == 1:
-        #    sa_p = True
-        #else:
-        #    sa_p = False
+        #sa_p = at.self_assembly(X, O, capacity, initial_graph=initial_graph)
+        rewire_p = at.prob_dist(X, O, capacity,
+                              max_iters=2*target.number_of_edges(), initial_graph = initial_graph,
+                              multiedge=False, verbose =False,max_edges = True,
+                              rewire_est=True)
+        if len(rewire_p[0]) == 1:
+            sa_p = True
+        else:
+            sa_p = False
     # sa_p = np.nan
     # Get name information
     graph_name = args.graph_file.split('/')[-1]
@@ -198,17 +194,7 @@ def main():
     #nauty_graph = pynauty.Graph(number_of_vertices=len(target.nodes()), adjacency_dict=new_dict)
     #num_orbits = pynauty.autgrp(nauty_graph)[-1]
     #num_orbits = len(get_automorphic_groups_nx(target))
-    
-    with open('/scratch/glover.co/NetDesign/data/NOdict.json','r') as f:
-        orbit_dict = json.load(f)
-    file_list = args.graph_file.split('/')
-    dataset = file_list[5]
-    if dataset == 'IkeaData':
-        dataset = 'ikea'
-    type_data = file_list[6]
-    name = file_list[-1].split('.')[0]
-    if name in orbit_dict[dataset][type_data]:
-        num_orbits = orbit_dict[dataset][type_data][name]['NO']
+    num_orbits = np.nan
     if len(tree_data) == 0:
         stats = [name,
                  subdir,
@@ -232,7 +218,7 @@ def main():
         df.loc[len(df)] = stats
         # Save the dataframe to the output file
         timestamp = time.strftime("%Y%m%d")
-        output_file = f"{args.output.rsplit('.', 1)[0]}_{timestamp}.csv"
+        output_file = f"{args.output.rsplit('.', 1)[0]}_no_orbit_{timestamp}.csv"
         df.to_csv(output_file, index=False)
     else:
         for i in range(len(tree_data)):
@@ -259,7 +245,7 @@ def main():
             df.loc[len(df)] = stats
             # Save the dataframe to the output file
             timestamp = time.strftime("%Y%m%d")
-            output_file = f"{args.output.rsplit('.', 1)[0]}_{timestamp}.csv"
+            output_file = f"{args.output.rsplit('.', 1)[0]}_no_orbit_{timestamp}.csv"
             df.to_csv(output_file, index=False)
 
 if __name__ == "__main__":

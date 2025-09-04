@@ -4,11 +4,11 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4GB
 #SBATCH --time=12:00:00
-#SBATCH --job-name=DF_1949
-#SBATCH --partition=short
+#SBATCH --job-name=DF_ikea
+#SBATCH --partition=netsi_largemem
 #SBATCH --output=/scratch/glover.co/NetDesign/out/df_%A_%a.log
 #SBATCH --error=/scratch/glover.co/NetDesign/err/df_%A_%a.log
-#SBATCH --array=365
+#SBATCH --array=1-100%1
 
 set -x
 
@@ -23,7 +23,7 @@ trap 'echo "Caught SIGINT at $(date)"' INT
 trap 'echo "Exited with code $?"' EXIT
  
 # Read in parameters file
-PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/proteins/analysis_params.txt)
+PARAMS=$(awk "NR==${SLURM_ARRAY_TASK_ID}" /projects/ccnr/glover.co/net_design/NetDesign/params/circuits/analysis_params.txt)
 
 
 sleep 1
@@ -32,7 +32,7 @@ sleep 1
 echo "${SLURM_ARRAY_TASK_ID}"
 # Run mcmc script with parameters
 set -- $PARAMS
-python /projects/ccnr/glover.co/net_design/NetDesign/scripts/analyze_data.py "$@"
+python /projects/ccnr/glover.co/net_design/NetDesign/scripts/no_orbit_analyze_data.py "$@"
 #python /projects/ccnr/glover.co/net_design/NetDesign/scripts/max_diversity.py
 sleep 1
 echo "job ${SLURM_ARRAY_TASK_ID} complete"
